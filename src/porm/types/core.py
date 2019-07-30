@@ -37,7 +37,7 @@ class BaseType(metaclass=ABCMeta):
 
     def __init__(self, *args, **kwargs):
         for key, attr_name in self.__baseattrs__.items():
-            setattr(self, key, kwargs.get(key, getattr(self, attr_name, None)))
+            setattr(self, key, kwargs.get(key[1:], getattr(self, attr_name, None)))
         self._value = None
         self._name = None
         self._has_value = False

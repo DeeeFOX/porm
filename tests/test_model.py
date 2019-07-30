@@ -16,10 +16,12 @@ class TestDatabase(DatabaseTestCase):
         updatetime = DatetimeType(required=False, default=None)
         is_active = IntegerType(required=False, default=1)
 
-    def test_ormobj_insert(self):
-        user_info = self.UserInfo.new(email='dennias.chiu@gmail.com', username='dennias')
-        with user_info.dbi.start_transaction() as _t:
-            user_info.dbi.execute_sql("""
+    user_info = None
+
+    def test_ormobj_crud(self):
+        self.user_info = self.UserInfo.new(email='dennias.chiu@gmail.com', username='dennias')
+        with self.user_info.dbi.start_transaction() as _t:
+            self.user_info.dbi.execute_sql("""
             CREATE TABLE `UserInfo` (
               `userid` bigint NOT NULL AUTO_INCREMENT,
               `email` varchar(255) NOT NULL COMMENT '电子邮箱',
@@ -32,9 +34,18 @@ class TestDatabase(DatabaseTestCase):
               UNIQUE KEY `email` (`email`),
               UNIQUE KEY `username` (`username`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8;""")
-            user_info.insert(t=_t)
+            self.user_info.insert(t=_t)
             obj = self.UserInfo.get_one(email='dennias.chiu@gmail.com', username='dennias', t=_t)
             self.assertIsNotNone(obj)
+            obj.reset(email='123@123.com')
+            obj.update(t=_t)
+            obj = self.UserInfo.get_one(email='123@123.com')
+            self.assertIsNotNone(obj)
+            self.assertEqual(obj.email, '123@123.com')
+            obj.delete(t=_t)
+            obj = self.UserInfo.get_one(email='123@123.com')
+            self.assertIsNone(obj)
 
     def test_drop_table(self):
-        self.api.execute_sql('DROP TABLE UserInfo;')
+        self.user_info = self.UserInfo.new(email='dennias.chiu@gmail.com', username='dennias')
+        self.user_info.dbi.delete('DROP TABLE UserInfo;')

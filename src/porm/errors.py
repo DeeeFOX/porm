@@ -33,6 +33,11 @@ class EmptyError(BaseError):
     STATUS = u'Porm Empty Error'
 
 
+class NotSupportError(BaseError):
+    SUBCODE = 12404
+    STATUS = u'Porm Not Supported Error'
+
+
 class InterfaceError(BaseError):
     SUBCODE = 11404
     STATUS = u'Porm Interface Error'
@@ -46,6 +51,7 @@ class OperationalError(BaseError):
 class ParamError(BaseError):
     SUBCODE = 10422
     STATUS = u'Porm Invalid Parameter Error'
+
 
 
 def reraise(tp, value, tb=None):

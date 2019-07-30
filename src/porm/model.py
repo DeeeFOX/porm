@@ -1,16 +1,17 @@
+from __future__ import annotations
 import json
 import logging
 from collections import OrderedDict
 from copy import deepcopy
-from typing import List
+from typing import List, Union
 
 from porm.databases.api.mysql import CONN_CONF, MyDBApi
-from porm.errors import ValidationError, EmptyError, ParamError
+from porm.errors import ValidationError, EmptyError, ParamError, NotSupportError
 from porm.parsers.mysql import parse, parse_join, ParsedResult
 from porm.types.core import VarcharType, BaseType, IntegerType
 from porm.utils import param_notempty, type_check, DTJsonEncoder
 
-__all__ = ("DBModel", "DBModelMetaData")
+__all__ = ("DBModel",)
 try:  # Python 2.7+
     from logging import NullHandler
 except ImportError:
@@ -81,7 +82,7 @@ class DBModelMetaData(object):
         return self._table
 
     @property
-    def table(self):
+    def table(self) -> Table:
         if self._table is None:
             self._init_table()
         return self._table
@@ -331,6 +332,17 @@ class BaseDBModel(object):
             ret[column] = self._data[column]
         return repr(ret)
 
+    def __getattr__(self, item):
+        if item in self.__META__.fields:
+            if item in self.valid_fields:
+                return self._data[item]
+            else:
+                raise EmptyError(u'Field: {} is Not Valid'.format(item))
+        else:
+            raise NotSupportError(
+                u'Field: {} Not in Defined Field: {} of {}'.format(
+                    item, self.__META__.fields, self.__META__.get_full_table_name()))
+
     @property
     def valid_fields(self) -> OrderedDict:
         """
@@ -428,8 +440,8 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
         return _db_conf
 
     @classmethod
-    def new(cls, *args, **kwargs):
-        obj = cls(*args, **kwargs)
+    def new(cls, **kwargs) -> DBModel:
+        obj = cls(**kwargs)
         return obj
 
     @classmethod
@@ -452,7 +464,7 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
         return int(total_cnt)
 
     @classmethod
-    def search(cls, return_columns=None, order_by=None, db=None, table=None, t=None, **terms):
+    def search(cls, return_columns=None, order_by=None, db=None, table=None, t=None, **terms) -> SearchResult:
         """
         分页查询接口
         :param return_columns:
@@ -537,7 +549,7 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
     @classmethod
     def get_many_and_join(
             cls, return_columns=None, order_by=None, db=None, get_tablename=None, t=None, for_update=False,
-            join_table=None, parse_with_tablename=False, **terms) -> list:
+            join_table=None, parse_with_tablename=False, **terms) -> List[DBModel]:
         """
         全量连接查询接口
         :param return_columns:
@@ -563,7 +575,7 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
         return rets
 
     @classmethod
-    def get_one(cls, return_columns=None, t=None, for_update=False, **kwargs):
+    def get_one(cls, return_columns=None, t=None, for_update=False, **kwargs) -> Union[None, DBModel]:
         _l = cls.get_many(return_columns=return_columns, t=t, for_update=for_update, page=0, size=1, **kwargs)
         if _l:
             return _l[0]
@@ -619,7 +631,7 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
         return mydb.insert_many(_sql_tpl, _params)
 
     @property
-    def dbi(self):
+    def dbi(self) -> MyDBApi:
         return MyDBApi(config=self._get_db_conf())
 
     def upsert(self, t=None, *update_fields):
