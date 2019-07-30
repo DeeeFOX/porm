@@ -29,7 +29,7 @@ setup(
     description=(
         "A flexible forms validation and rendering library for Python"
         " web development"
-        " that inherited and learned from WTForms."
+        " that inherited and learned from Peewee."
     ),
     long_description=readme,
     long_description_content_type="text/markdown",

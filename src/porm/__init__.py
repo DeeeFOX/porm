@@ -1,5 +1,5 @@
 """
-KCUForms
+Porm
 =======
 Porm is a flexible orm library for python web
 development that inherited and learned form Peewee.
