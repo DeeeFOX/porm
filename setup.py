@@ -4,7 +4,9 @@ import io
 
 from setuptools import setup, find_packages
 
-with io.open("README.md", "rt", encoding="utf8") as fd:
+from os import path
+this_directory = path.abspath(path.dirname(__file__))
+with io.open(path.join(this_directory, "README.md"), "rt", encoding="utf-8") as fd:
     readme = fd.read()
 
 with io.open("src/porm/__init__.py", "rt", encoding="utf8") as f:
