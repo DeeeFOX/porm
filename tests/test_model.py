@@ -1,4 +1,4 @@
-from porm import IntegerType, VarcharType, TextType, DatetimeType
+from porm import IntegerType, VarcharType, TextType, DatetimeType, FloatType
 from porm.databases.api.mysql import CONN_CONF
 from porm.model import DBModel
 from tests.test_common import DatabaseTestCase
@@ -15,12 +15,14 @@ class TestDatabase(DatabaseTestCase):
         createtime = DatetimeType(required=False, default=None)
         updatetime = DatetimeType(required=False, default=None)
         is_active = IntegerType(required=False, default=1)
+        height = FloatType(required=True)
 
     user_info = None
 
     def test_ormobj_crud(self):
-        self.user_info = self.UserInfo.new(email='dennias.chiu@gmail.com', username='dennias')
+        self.user_info = self.UserInfo.new(email='dennias.chiu@gmail.com', username='dennias', height=188)
         with self.user_info.dbi.start_transaction() as _t:
+            self.user_info.dbi.execute_sql("""DROP TABLE IF EXISTS UserInfo;""")
             self.user_info.dbi.execute_sql("""
             CREATE TABLE `UserInfo` (
               `userid` bigint NOT NULL AUTO_INCREMENT,
@@ -30,6 +32,7 @@ class TestDatabase(DatabaseTestCase):
               `createtime` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
               `updatetime` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
               `is_active` tinyint(1) DEFAULT '1' COMMENT '用户有效标志',
+              `height` DECIMAL(10,4) NOT NULL comment '售卖价格',
               PRIMARY KEY (`userid`),
               UNIQUE KEY `email` (`email`),
               UNIQUE KEY `username` (`username`)

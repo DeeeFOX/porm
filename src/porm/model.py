@@ -9,7 +9,7 @@ from porm.databases.api.mysql import CONN_CONF, MyDBApi
 from porm.errors import ValidationError, EmptyError, ParamError, NotSupportError
 from porm.parsers.mysql import parse, parse_join, ParsedResult
 from porm.types.core import VarcharType, BaseType, IntegerType
-from porm.utils import param_notempty, type_check, DTJsonEncoder
+from porm.utils import param_notempty, type_check, PormJsonEncoder
 
 __all__ = ("DBModel",)
 try:  # Python 2.7+
@@ -322,7 +322,7 @@ class BaseDBModel(object):
         return self.__class__(**deepcopy(_d))
 
     def __str__(self):
-        return json.dumps(self._data, cls=DTJsonEncoder)
+        return json.dumps(self._data, cls=PormJsonEncoder)
 
     def __repr__(self):
         ret = {}
@@ -524,7 +524,7 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
             )
         param = parsed['param']
         mydb = MyDBApi(config=cls._get_db_conf(db=db), t=t)
-        rets = [cls.new(**json.loads(json.dumps(obj, cls=DTJsonEncoder))) for obj in mydb.query_many(sql, param)]
+        rets = [cls.new(**json.loads(json.dumps(obj, cls=PormJsonEncoder))) for obj in mydb.query_many(sql, param)]
         return rets
 
     @classmethod

@@ -16,7 +16,8 @@ __all__ = (
     "TextType",
     "DateType",
     "DatetimeType",
-    "TimestampType"
+    "TimestampType",
+    "FloatType"
 )
 
 
@@ -207,3 +208,7 @@ class TimestampType(BaseType):
         else:
             raise ValidationError(u'{}: {} is not valid'.format(self.name or 'value', val, self.type))
         return val
+
+
+class FloatType(IntegerType):
+    _TYPE = float

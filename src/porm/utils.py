@@ -1,3 +1,4 @@
+import decimal
 from datetime import datetime, date
 from functools import wraps
 from json import JSONEncoder
@@ -77,11 +78,13 @@ def type_check(*args_type, **kwargs_type):
     return type_checker
 
 
-class DTJsonEncoder(JSONEncoder):
+class PormJsonEncoder(JSONEncoder):
     def default(self, obj):
         if isinstance(obj, datetime):
             return obj.strftime('%Y-%m-%d %H:%M:%S')
         elif isinstance(obj, date):
             return obj.strftime('%Y-%m-%d')
+        elif isinstance(obj, decimal.Decimal):
+            return float(obj)
         else:
             return JSONEncoder.default(self, obj)

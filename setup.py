@@ -5,12 +5,18 @@ import io
 from setuptools import setup, find_packages
 
 from os import path
+
 this_directory = path.abspath(path.dirname(__file__))
 with io.open(path.join(this_directory, "README.md"), "rt", encoding="utf-8") as fd:
     readme = fd.read()
 
-with io.open("src/porm/__init__.py", "rt", encoding="utf8") as f:
+with io.open("src/porm/__init__.py", "rt", encoding="utf-8") as f:
     version = re.search(r"__version__ = \"(.*?)\"", f.read()).group(1)
+
+reqs = [
+    'pymysql==0.9.3',
+    'python-dateutil==2.8.0'
+]
 
 setup(
     name="Porm",
@@ -50,4 +56,5 @@ setup(
         "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
+    install_requires=reqs
 )
