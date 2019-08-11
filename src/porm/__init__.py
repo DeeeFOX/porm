@@ -11,4 +11,4 @@ development that inherited and learned form Peewee.
 from porm import validators
 from porm.types import *
 
-__version__ = "0.0.4dev"
+__version__ = "0.0.5dev"
