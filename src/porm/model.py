@@ -202,6 +202,8 @@ class DBModelMeta(type):
     instances are ignored by the metaclass.
     """
 
+    CUSTOM_ATTR = {'__DATABASE__', '__TABLE__', '__CONFIG__', '__DB__'}
+
     def __new__(mcs, name: str, bases: tuple, attrs: dict):
         """
         Meta class of search form
@@ -210,25 +212,115 @@ class DBModelMeta(type):
         :param attrs: attributes of decorated class
         :return: an instance of the type class
         """
-        _metadata = mcs.init_meta_data(name, attrs)
-        _metadata = mcs.set_columns(_metadata, attrs)
+        mcs.init_meta_data(name, bases, attrs)
+        mcs.set_columns(bases, attrs)
         return super().__new__(mcs, name, bases, attrs)
 
     @staticmethod
-    def init_meta_data(name: str, attrs: dict):
-        database_name = attrs.pop('__DATABASE__', attrs.pop('__DB__', 'PORM_DATABASE'))
-        table_name = attrs.pop('__TABLE__', name)
-        connection_config = attrs.pop('__CONFIG__', CONN_CONF)
-        metadata = DBModelMetaData(database_name=database_name, table_name=table_name, **connection_config)
-        attrs['__META__'] = metadata
-        return metadata
+    def init_meta_data(name: str, bases: tuple, attrs: dict):
+        database_name = attrs.get('__DATABASE__', attrs.get('__DB__', None))
+        if database_name:
+            setattr(bases[0], '__DATABASE__', database_name)
+        table_name = attrs.get('__TABLE__', name)
+        setattr(bases[0], '__TABLE__', table_name)
+        connection_config = attrs.get('__CONFIG__', None)
+        if connection_config:
+            setattr(bases[0], '__CONFIG__', connection_config)
+        # metadata = DBModelMetaData(database_name=database_name, table_name=table_name, **connection_config)
+        # attrs['__META__'] = metadata
+        # return metadata
 
     @staticmethod
-    def set_columns(metadata: DBModelMetaData, attrs: dict, col_types: tuple = ('__FIELDS__', '__PK__')):
-        cols = OrderedDict()
+    def set_columns(bases: tuple, attrs: dict, col_types: tuple = ('__FIELDS__', '__PK__')):
+        _pks = OrderedDict()
+        _fields = OrderedDict()
         for col_type in col_types:
             if col_type in attrs:
-                for field in attrs.pop(col_type):
+                field_attrs = attrs[col_type]
+                del attrs[col_type]
+                for field in field_attrs:
+                    if isinstance(field, tuple):
+                        # support tuple define like: [('name', TextField), ('info', TextField)]
+                        field_name = field[0]
+                        field_type = field[1]
+                        if callable(field_type):
+                            if field == '__PK__':
+                                field_type = field_type(ispk=True)
+                            else:
+                                field_type = field_type(ispk=False)
+                        elif isinstance(field_type, BaseType):
+                            if field == '__PK__' and field_type.ispk() is False:
+                                field_type.set_pk(ispk=True)
+                        else:
+                            raise ParamError(u'Error Field Type: {}'.format(field_type))
+                    else:
+                        # support string define like: ['name', 'info']
+                        field_name = field
+                        if field == '__PK__':
+                            field_type = IntegerType(ispk=True)
+                        else:
+                            field_type = VarcharType(ispk=False)
+                    field_type.set_name(field_name)
+                    if field_type.ispk():
+                        _pks[field_name] = field_type
+                    else:
+                        _fields[field_name] = field_type
+                    # metadata.add_field(field_name=field_name, field_type=field_type)
+        for field_name, field_type in list(attrs.items()):
+            if isinstance(field_type, BaseType):
+                del attrs[field_name]
+                field_type.set_name(field_name)
+                if field_type.ispk():
+                    _pks[field_name] = field_type
+                else:
+                    _fields[field_name] = field_type
+            else:
+                continue
+            # metadata.add_field(field_name=field_name, field_type=field_type)
+        _pklist = [(field_name, field_type) for field_name, field_type in _pks.items()]
+        _fieldlist = [(field_name, field_type) for field_name, field_type in _fields.items()]
+        setattr(bases[0], '__PK__', _pklist)
+        setattr(bases[0], '__FIELDS__', _fieldlist)
+        attrs['__PK__'] = _pklist
+        attrs['__FIELDS__'] = _fieldlist
+        # return metadata
+
+
+class BaseDBModel(dict):
+    """
+    Base DBModel Class.  Provides core behaviour like field construction,
+    validation, and data and error proxying.
+    """
+
+    __META__: DBModelMetaData = None
+    __DATABASE__: str = 'PORM_DATABASE'
+    __DB__: str = 'PORM_DATABASE'
+    __TABLE__: str = 'BaseDBModel'
+    __CONFIG__: dict = None
+
+    def __new__(cls, *args, **kwargs):
+        _metadata = cls._init_cls_meta_data()
+        cls._set_cls_columns(_metadata)
+        return dict.__new__(cls, *args, **kwargs)
+
+    @classmethod
+    def _init_cls_meta_data(cls):
+        database_name = getattr(cls, '__DATABASE__', getattr(cls, '__DB__', None))
+        table_name = getattr(cls, '__TABLE__', cls.__class__.__name__)
+        connection_config = getattr(cls, '__CONFIG__', None)
+        metadata = DBModelMetaData(database_name=database_name, table_name=table_name, **connection_config)
+        setattr(cls, '__META__', metadata)
+        return metadata
+
+    @classmethod
+    def _set_cls_columns(cls, metadata: DBModelMetaData, col_types: tuple = ('__FIELDS__', '__PK__')):
+        cols = OrderedDict()
+        attr_names = dir(cls)
+
+        for col_type in col_types:
+            if col_type in attr_names:
+                fields = getattr(cls, col_type)
+                for field in fields:
                     if isinstance(field, tuple):
                         # support tuple define like: [('name', TextField), ('info', TextField)]
                         field_name = field[0]
@@ -253,28 +345,10 @@ class DBModelMeta(type):
                     field_type.set_name(field_name)
                     cols[field_name] = field_type
                     metadata.add_field(field_name, field_type=field_type)
-        for field_name, field_type in list(attrs.items()):
-            if isinstance(field_type, BaseType):
-                del attrs[field_name]
-                field_type.set_name(field_name)
-                metadata.add_field(field_name, field_type=field_type)
-            else:
-                continue
         return metadata
 
-
-class BaseDBModel(object):
-    """
-    Base DBModel Class.  Provides core behaviour like field construction,
-    validation, and data and error proxying.
-    """
-
-    __META__: DBModelMetaData = None
-    __DATABASE__: str = 'PORM_DATABASE'
-    __TABLE__: str = 'BaseDBModel'
-    __CONFIG__: dict = None
-
     def __init__(self, **kwargs):
+        super(BaseDBModel, self).__init__(**kwargs)
         self._data = dict()
         self._actived_fields = dict()
         self._init_data(**kwargs)
@@ -333,15 +407,28 @@ class BaseDBModel(object):
         return repr(ret)
 
     def __getattr__(self, item):
+        # if item == '__DB__':
+        #     return self.__DB__
+        # elif item == '__DATABASE__':
+        #     return self.__DATABASE__
+        # elif item == '__CONFIG__':
+        #     return self.__CONFIG__
+        # elif item == '__TABLE__':
+        #     return self.__TABLE__
+        # elif item == 'dbi':
+        #     return self.dbi
+        # el
         if item in self.__META__.fields:
             if item in self.valid_fields:
                 return self._data[item]
             else:
                 raise EmptyError(u'Field: {} is Not Valid'.format(item))
         else:
-            raise NotSupportError(
-                u'Field: {} Not in Defined Field: {} of {}'.format(
-                    item, self.__META__.fields, self.__META__.get_full_table_name()))
+            a = super(BaseDBModel, self).__getattribute__(item)
+            return a
+            # raise NotSupportError(
+            #     u'Field: {} Not in Defined Field: {} of {}'.format(
+            #         item, self.__META__.fields, self.__META__.get_full_table_name()))
 
     @property
     def valid_fields(self) -> OrderedDict:
