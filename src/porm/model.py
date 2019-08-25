@@ -5,8 +5,8 @@ from collections import OrderedDict
 from copy import deepcopy
 from typing import List, Union
 
-from porm.databases.api.mysql import CONN_CONF, MyDBApi
-from porm.errors import ValidationError, EmptyError, ParamError, NotSupportError
+from porm.databases.api.mysql import MyDBApi
+from porm.errors import ValidationError, EmptyError, ParamError
 from porm.parsers.mysql import parse, parse_join, ParsedResult
 from porm.types.core import VarcharType, BaseType, IntegerType
 from porm.utils import param_notempty, type_check, PormJsonEncoder
@@ -527,12 +527,19 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
         return _db_conf
 
     @classmethod
+    def _check_meta(cls):
+        if cls.__META__ is None:
+            _metadata = cls._init_cls_meta_data()
+            cls._set_cls_columns(_metadata)
+
+    @classmethod
     def new(cls, **kwargs) -> DBModel:
         obj = cls(**kwargs)
         return obj
 
     @classmethod
     def count(cls, return_columns='COUNT(1) as cnt', db=None, table=None, join_table=None, t=None, **terms) -> int:
+        cls._check_meta()
         cnt_table = table
         cnt_parsed = parse(**terms)
         if join_table:
@@ -563,6 +570,7 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
         :return:
         :rtype SearchResult
         """
+        cls._check_meta()
         page = max(terms.pop('page', 1) or 1, 1)
         size = terms.pop('size', 10)
         total_cnt = cls.count(db=db, table=table, t=t, **terms)
@@ -583,6 +591,7 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
         :param terms: {'key': ('value', 'LIKE')}
         :return:
         """
+        cls._check_meta()
         if not join_table:
             return cls.search(return_columns=return_columns, order_by=order_by, db=db, table=table, t=t, **terms)
         else:
@@ -597,6 +606,7 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
     @classmethod
     def _get_by_parsed_terms(
             cls, return_columns=None, db=None, table=None, t=None, for_update=False, parsed: ParsedResult = None):
+        cls._check_meta()
         if not return_columns:
             return_columns = cls.__META__.fields
         if not for_update:
@@ -628,6 +638,7 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
         :param terms:
         :return:
         """
+        cls._check_meta()
         parsed = parse(order_by=order_by, **terms)
         rets = cls._get_by_parsed_terms(
             return_columns=return_columns, db=db, table=table, t=t, for_update=for_update, parsed=parsed)
@@ -650,6 +661,7 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
         :param parse_with_tablename:
         :return:
         """
+        cls._check_meta()
         get_tablename = cls.__META__.get_full_table_name(db=db, table=get_tablename)
         term_tablename = get_tablename if parse_with_tablename else None
         parsed = parse(tablename=term_tablename, order_by=order_by, **terms)
@@ -677,6 +689,7 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
         :param terms: 删除过滤条件
         :return:
         """
+        cls._check_meta()
         if not terms:
             raise Exception(u'ERROR: Unknow delete terms')
         parsed = parse(**terms)
@@ -695,6 +708,7 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
         :param ignore: 执行insert ignore语义
         :return:
         """
+        cls._check_meta()
         if not objs:
             return None
         _sql_tpls = set()
