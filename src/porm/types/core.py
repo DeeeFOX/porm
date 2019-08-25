@@ -158,7 +158,7 @@ class DatetimeType(BaseType):
         super().validate(val)
         if isinstance(val, six.string_types):
             try:
-                val = self.type(val, self.format)
+                val = datetime.datetime.strptime(val, self.format)
             except Exception:
                 val = parser.parse(val)
         elif isinstance(val, self.type):
@@ -182,7 +182,7 @@ class DateType(BaseType):
         super().validate(val)
         if isinstance(val, six.string_types):
             try:
-                val = self.type(val, self.format)
+                val = datetime.datetime.strptime(val, self.format)
             except Exception:
                 val = parser.parse(val)
         elif isinstance(val, self.type):
@@ -212,3 +212,27 @@ class TimestampType(BaseType):
 
 class FloatType(IntegerType):
     _TYPE = float
+
+
+class TimeType(BaseType):
+    _TYPE = datetime.time
+    _DEFAULT = datetime.time.fromisoformat('08:00:00')
+    _FORMAT = '%H:%M:%S'
+
+    def __init__(self, *args, **kwargs):
+        super(TimeType, self).__init__(*args, **kwargs)
+        self.format = kwargs.get('format', self._FORMAT)
+
+    @field_exception
+    def validate(self, val):
+        super().validate(val)
+        if isinstance(val, six.string_types):
+            try:
+                val = datetime.time.fromisoformat(val)
+            except Exception:
+                val = parser.parse(val)
+        elif isinstance(val, self.type):
+            pass
+        else:
+            raise ValidationError(u'{}: {} is not string type or {} type'.format(self.name or 'value', val, self.type))
+        return val

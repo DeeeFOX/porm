@@ -1,9 +1,11 @@
+import datetime
 import json
 
 import pymysql
 
 from porm import IntegerType, VarcharType, TextType, DatetimeType, FloatType
 from porm.model import DBModel
+from porm.types.core import TimeType
 from tests.test_common import DatabaseTestCase
 
 
@@ -28,11 +30,14 @@ class TestDatabase(DatabaseTestCase):
         updatetime = DatetimeType(required=False, default=None)
         is_active = IntegerType(required=False, default=1)
         height = FloatType(required=True, default=180)
+        start_time = TimeType(required=True, default=datetime.time.fromisoformat('08:00:00'))
 
     user_info = None
 
     def test_01_ormobj_crud(self):
-        self.user_info = self.UserInfo.new(email='dennias.chiu@gmail.com', username='dennias', height=188)
+        self.user_info = self.UserInfo.new(
+            email='dennias.chiu@gmail.com', username='dennias', height=188,
+            start_time=datetime.time.fromisoformat('08:00:00'))
         with self.user_info.dbi.start_transaction() as _t:
             self.user_info.dbi.execute_sql("""DROP TABLE IF EXISTS UserInfo;""")
             self.user_info.dbi.execute_sql("""
@@ -45,12 +50,14 @@ class TestDatabase(DatabaseTestCase):
               `updatetime` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
               `is_active` tinyint(1) DEFAULT '1' COMMENT '用户有效标志',
               `height` DECIMAL(10,4) NOT NULL comment '售卖价格',
+              `start_time` time default '08:00:00' comment '开始时间',
               PRIMARY KEY (`userid`),
               UNIQUE KEY `email` (`email`),
               UNIQUE KEY `username` (`username`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8;""")
             self.user_info.insert(t=_t)
             obj = self.UserInfo.get_one(email='dennias.chiu@gmail.com', username='dennias', t=_t)
+            self.assertEqual(obj['start_time'], datetime.time(8, 0))
             self.assertIsNotNone(obj)
             obj.reset(email='123@123.com')
             obj.update(t=_t)

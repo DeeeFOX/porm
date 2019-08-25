@@ -1,5 +1,5 @@
 import decimal
-from datetime import datetime, date
+from datetime import datetime, date, time, timedelta
 from functools import wraps
 from json import JSONEncoder
 
@@ -86,5 +86,10 @@ class PormJsonEncoder(JSONEncoder):
             return obj.strftime('%Y-%m-%d')
         elif isinstance(obj, decimal.Decimal):
             return float(obj)
+        elif isinstance(obj, time):
+            return obj.strftime('%H:%M:%S')
+        elif isinstance(obj, timedelta):
+            sec = int(obj.total_seconds())
+            return '{H:02d}:{M:02d}:{S:02d}'.format(H=int(sec / 3600), M=int(sec / 24 % 60), S=sec % 60)
         else:
             return JSONEncoder.default(self, obj)
