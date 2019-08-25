@@ -3,6 +3,7 @@ import threading
 import uuid
 import warnings
 from functools import wraps
+from typing import List
 
 from porm.errors import InterfaceError, OperationalError, __exception_wrapper__
 
@@ -364,7 +365,7 @@ class DBApi(_callable_context_manager):
                 raise InterfaceError('Error, database connection not opened.')
         return self._state.conn.cursor()
 
-    def execute_sql(self, sql, params=None, commit=SENTINEL):
+    def execute_sql(self, sql, params: tuple=None, commit=SENTINEL):
         logger.debug((sql, params))
         if commit is SENTINEL:
             if self.in_transaction():
@@ -376,6 +377,27 @@ class DBApi(_callable_context_manager):
             cursor = self.cursor(commit)
             try:
                 cursor.execute(sql, params or ())
+            except Exception:
+                if self.autorollback and not self.in_transaction():
+                    self.rollback()
+                raise
+            else:
+                if commit and not self.in_transaction():
+                    self.commit()
+        return cursor
+
+    def execute_sqls(self, sql, params: List[tuple]=None, commit=SENTINEL):
+        logger.debug((sql, params))
+        if commit is SENTINEL:
+            if self.in_transaction():
+                commit = False
+            else:
+                commit = not sql[:6].lower().startswith('select')
+
+        with __exception_wrapper__:
+            cursor = self.cursor(commit)
+            try:
+                cursor.executemany(sql, params or [])
             except Exception:
                 if self.autorollback and not self.in_transaction():
                     self.rollback()

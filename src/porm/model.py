@@ -717,9 +717,9 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
             if not isinstance(obj, cls):
                 raise Exception(u'ERROR: Unknown type: {} in valid type: {}'.format(type(obj), cls))
             else:
-                _sql, valid_fields = obj._insert_ignore_sql if ignore else obj._insert_sql
-                _sql_tpls.add(_sql)
-                _params.append(valid_fields)
+                _sql_obj = obj._insert_ignore_sql if ignore else obj._insert_sql
+                _sql_tpls.add(_sql_obj.sql)
+                _params.append(_sql_obj.param)
         if len(_sql_tpls) == 1:
             # 如果所有生成的sql一样，说明插入的对象一样
             _sql_tpl = _sql_tpls.pop()

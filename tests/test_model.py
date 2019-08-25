@@ -3,7 +3,6 @@ import json
 import pymysql
 
 from porm import IntegerType, VarcharType, TextType, DatetimeType, FloatType
-from porm.databases.api.mysql import CONN_CONF
 from porm.model import DBModel
 from tests.test_common import DatabaseTestCase
 
@@ -61,6 +60,16 @@ class TestDatabase(DatabaseTestCase):
             obj.delete(t=_t)
             obj = self.UserInfo.get_one(email='123@123.com')
             self.assertIsNone(obj)
+            u1 = self.UserInfo.new(email='dennias.chiu@gmail.com1', username='dennias1', height=188)
+            u2 = self.UserInfo.new(email='dennias.chiu@gmail.com2', username='dennias2', height=188)
+            u3 = self.UserInfo.new(email='dennias.chiu@gmail.com3', username='dennias3', height=188)
+            self.UserInfo.insert_many([u1, u2, u3])
+            ua1 = self.UserInfo.get_one(email='dennias.chiu@gmail.com1')
+            self.assertIsNotNone(ua1)
+            self.assertEqual(ua1['email'], 'dennias.chiu@gmail.com1')
+            ua2 = self.UserInfo.get_one(email='dennias.chiu@gmail.com2')
+            self.assertIsNotNone(ua2)
+            self.assertEqual(ua2['email'], 'dennias.chiu@gmail.com2')
 
     def test_02_serielization(self):
         self.user_info = self.UserInfo.new(email='dennias.chiu@gmail.com', username='dennias', height=180)

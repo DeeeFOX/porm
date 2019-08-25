@@ -143,11 +143,12 @@ class MyDBApi(DBApi):
             self._log(sql, param, level='error')
             raise ex
 
-    def insert_many(self, sql, param=None):
+    def insert_many(self, sql, params=None):
         try:
-            self.execute_sql(sql, params=param)
+            self.execute_sqls(sql, params=params)
         except Exception as ex:
-            self._log(sql, param, level='error')
+            for param in params:
+                self._log(sql, param, level='error')
             raise ex
 
     def delete(self, sql, param=None):
