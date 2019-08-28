@@ -2,6 +2,7 @@ from __future__ import annotations
 import json
 import logging
 from collections import OrderedDict
+from contextlib import contextmanager
 from copy import deepcopy
 from typing import List, Union
 
@@ -536,6 +537,15 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
     def new(cls, **kwargs) -> DBModel:
         obj = cls(**kwargs)
         return obj
+
+    @classmethod
+    @contextmanager
+    def start_transaction(cls, db=None):
+        cls._check_meta()
+        config = cls._get_db_conf(db=db)
+        dbi = MyDBApi(config=config)
+        with dbi.start_transaction() as _t:
+            yield _t
 
     @classmethod
     def count(cls, return_columns='COUNT(1) as cnt', db=None, table=None, join_table=None, t=None, **terms) -> int:

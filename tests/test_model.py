@@ -89,6 +89,16 @@ class TestDatabase(DatabaseTestCase):
             self.assertEqual(json_obj['email'], 'dennias.chiu@gmail.com')
             obj.delete(t=_t)
 
-    def test_03_drop_table(self):
+    def test_03_transaction(self):
+        with self.UserInfo.start_transaction() as _t:
+            ui2 = self.UserInfo.get_one(email='dennias.chiu@gmail.com1', for_update=True, t=_t)
+            ui3 = self.UserInfo.get_one(email='dennias.chiu@gmail.com1', for_update=True, t=_t)
+            self.assertEqual(ui2.email, ui3.email)
+            from time import sleep
+            sleep(4)
+            uis = self.UserInfo.get_many(userid=([1, 2, 3, 4, 5, 6], 'IN'), for_update=True, t=_t)
+            sleep(10)
+
+    def test_04_drop_table(self):
         self.user_info = self.UserInfo.new(email='dennias.chiu@gmail.com', username='dennias')
         self.user_info.dbi.execute_sql('DROP TABLE UserInfo;')

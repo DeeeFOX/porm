@@ -17,7 +17,8 @@ __all__ = (
     "DateType",
     "DatetimeType",
     "TimestampType",
-    "FloatType"
+    "FloatType",
+    "TimeType"
 )
 
 
