@@ -21,7 +21,7 @@ class TestDatabase(DatabaseTestCase):
             'cursorclass': pymysql.cursors.DictCursor
         }
 
-    class UserInfo(TestModel):
+    class UserInfoBase(TestModel):
         userid = IntegerType(pk=True, required=True)
         username = VarcharType(required=True)
         email = VarcharType(required=True)
@@ -29,8 +29,16 @@ class TestDatabase(DatabaseTestCase):
         createtime = DatetimeType(required=False, default=None)
         updatetime = DatetimeType(required=False, default=None)
         is_active = IntegerType(required=False, default=1)
-        height = FloatType(required=True, default=180)
         start_time = TimeType(required=True, default=datetime.time.fromisoformat('08:00:00'))
+
+    class AnotherInfoBase(TestModel):
+        weight = FloatType(required=True, default=180)
+
+    class UserInfo(UserInfoBase):
+        height = FloatType(required=True, default=180)
+
+    class AnotherInfo(AnotherInfoBase):
+        score = FloatType(required=True, default=180)
 
     user_info = None
 

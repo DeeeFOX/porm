@@ -235,6 +235,13 @@ class DBModelMeta(type):
     def set_columns(bases: tuple, attrs: dict, col_types: tuple = ('__FIELDS__', '__PK__')):
         _pks = OrderedDict()
         _fields = OrderedDict()
+        if bases[0].__name__ not in ('BaseDBModel', 'DBModel'):
+            for field_name, field_type in getattr(bases[0], '__PK__', []):
+                _pks[field_name] = field_type
+            for field_name, field_type in getattr(bases[0], '__FIELDS__', []):
+                _fields[field_name] = field_type
+        else:
+            pass
         for col_type in col_types:
             if col_type in attrs:
                 field_attrs = attrs[col_type]
@@ -280,8 +287,9 @@ class DBModelMeta(type):
             # metadata.add_field(field_name=field_name, field_type=field_type)
         _pklist = [(field_name, field_type) for field_name, field_type in _pks.items()]
         _fieldlist = [(field_name, field_type) for field_name, field_type in _fields.items()]
-        setattr(bases[0], '__PK__', _pklist)
-        setattr(bases[0], '__FIELDS__', _fieldlist)
+        if bases[0].__name__ in ('BaseDBModel', 'DBModel'):
+            setattr(bases[0], '__PK__', _pklist)
+            setattr(bases[0], '__FIELDS__', _fieldlist)
         attrs['__PK__'] = _pklist
         attrs['__FIELDS__'] = _fieldlist
         # return metadata
