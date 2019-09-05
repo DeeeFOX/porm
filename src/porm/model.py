@@ -94,11 +94,11 @@ class DBModelMetaData(object):
         return self._connection_config.copy()
 
     @property
-    def fields(self):
+    def fields(self) -> List[str]:
         return list(self._fields.keys())
 
     @property
-    def fields_with_tablename(self):
+    def fields_with_tablename(self) -> List[str]:
         tablename = self.get_full_table_name()
         return ['{}.{}'.format(tablename, field) for field in self._fields.keys()]
 
@@ -107,8 +107,10 @@ class DBModelMetaData(object):
 
     @type_check(field_type=BaseType)
     def add_field(self, field_name: str, field_type: BaseType = VarcharType()):
-        field_type.set_name(field_name)
-        self._fields[field_name] = Field(field_name, field_type)
+        tablename = self.get_full_table_name() + '.'
+        field_name_with_table = field_name if field_name.startswith(tablename) else tablename + field_name
+        field_type.set_name(field_name_with_table)
+        self._fields[field_name] = Field(field_name_with_table, field_type)
         if field_type.ispk():
             self.table.add_primary_key(field_name)
         else:
@@ -116,6 +118,9 @@ class DBModelMetaData(object):
 
     def get_field(self, field_name) -> Field:
         return self._fields[field_name]
+
+    def get_fields(self) -> List[Field]:
+        return list(self._fields.values())
 
     def get_field_type(self, field_name: str) -> BaseType:
         return self._fields[field_name].type
@@ -773,6 +778,14 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
         """
         cls._check_meta()
         return cls.__META__.get_field(name)
+
+    @classmethod
+    def get_fields(cls) -> List[Field]:
+        """
+        :return:
+        """
+        cls._check_meta()
+        return cls.__META__.get_fields()
 
     @classmethod
     def join(cls, join_table: DBModel.__class__, **eq_terms) -> Join:

@@ -151,6 +151,10 @@ class TestDatabase(DatabaseTestCase):
                 return_columns=['username', 'weight', 'height'], join_table=join_table, email='dennias.chiu@gmail.com1',
                 t=_t)
             self.assertEqual(ret.result[0]['weight'], 188.0)
+            ret = self.UserInfo.search_and_join(
+                return_columns=[field.name for field in self.UserBodyInfo.get_fields()], join_table=join_table,
+                email='dennias.chiu@gmail.com1', t=_t)
+            self.assertEqual(ret.result[0]['weight'], 188.0)
 
     def test_06_drop_table(self):
         with self.UserInfo.start_transaction() as _t:
