@@ -93,3 +93,49 @@ class PormJsonEncoder(JSONEncoder):
             return '{H:02d}:{M:02d}:{S:02d}'.format(H=int(sec / 3600), M=int(sec / 24 % 60), S=sec % 60)
         else:
             return JSONEncoder.default(self, obj)
+
+
+def param_notnone(func):
+    """
+    Validate the params of func are not none like None
+
+    :param func:
+    :return:
+    """
+
+    @wraps(func)
+    def wrapped_func(self, *args, **kwargs):
+        for param_idx, param_val in enumerate(args):
+            if param_val is None:
+                raise EmptyError(u'PARAM: idx of {} is empty: {}'.format(param_idx, param_val))
+        for param_key, param_val in kwargs.items():
+            if param_val is None:
+                raise EmptyError(u'PARAM: {} is empty: {}'.format(param_key, param_val))
+        return func(self, *args, **kwargs)
+
+    return wrapped_func
+
+
+def notnone_check(*arg_names):
+    def notnone_checker(func):
+        """
+        Validate the params of func are not none like None
+
+        :param func:
+        :return:
+        """
+
+        @wraps(func)
+        def wrapped_func(self, *args, **kwargs):
+            for arg_name in arg_names:
+                if isinstance(arg_name, int):
+                    if args[arg_name] is None:
+                        raise EmptyError(u'PARAM: param idx of {} is None'.format(arg_name))
+                elif isinstance(arg_name, str):
+                    if kwargs[arg_name] is None:
+                        raise EmptyError(u'PARAM: param name of {} is None'.format(arg_name))
+            return func(self, *args, **kwargs)
+
+        return wrapped_func
+
+    return notnone_checker

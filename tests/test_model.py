@@ -5,6 +5,7 @@ import pymysql
 
 from porm import IntegerType, VarcharType, TextType, DatetimeType, FloatType
 from porm.model import DBModel
+from porm.orms import SQL
 from porm.types.core import TimeType
 from tests.test_common import DatabaseTestCase
 
@@ -40,15 +41,21 @@ class TestDatabase(DatabaseTestCase):
     class AnotherInfo(AnotherInfoBase):
         score = FloatType(required=True, default=180)
 
+    class BodyInfoBase(TestModel):
+        id = IntegerType(pk=True, required=True)
+        createtime = DatetimeType(required=False, default=None)
+        updatetime = DatetimeType(required=False, default=None)
+
+    class UserBodyInfo(BodyInfoBase):
+        weight = FloatType(required=True)
+        userid = IntegerType(required=True)
+
     user_info = None
 
-    def test_01_ormobj_crud(self):
-        self.user_info = self.UserInfo.new(
-            email='dennias.chiu@gmail.com', username='dennias', height=188,
-            start_time=datetime.time.fromisoformat('08:00:00'))
-        with self.user_info.dbi.start_transaction() as _t:
-            self.user_info.dbi.execute_sql("""DROP TABLE IF EXISTS UserInfo;""")
-            self.user_info.dbi.execute_sql("""
+    def test_00_ormobj_createtable(self):
+        with self.UserInfo.start_transaction() as _t:
+            self.UserInfo.drop(ifexists=True, t=_t)
+            sql = SQL("""
             CREATE TABLE `UserInfo` (
               `userid` bigint NOT NULL AUTO_INCREMENT,
               `email` varchar(255) NOT NULL COMMENT '电子邮箱',
@@ -63,6 +70,13 @@ class TestDatabase(DatabaseTestCase):
               UNIQUE KEY `email` (`email`),
               UNIQUE KEY `username` (`username`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8;""")
+            self.UserInfo.create(sql=sql, t=_t)
+
+    def test_01_ormobj_crud(self):
+        with self.UserInfo.start_transaction() as _t:
+            self.user_info = self.UserInfo.new(
+                email='dennias.chiu@gmail.com', username='dennias', height=188,
+                start_time=datetime.time.fromisoformat('08:00:00'))
             self.user_info.insert(t=_t)
             obj = self.UserInfo.get_one(email='dennias.chiu@gmail.com', username='dennias', t=_t)
             self.assertEqual(obj['start_time'], datetime.time(8, 0))
@@ -110,10 +124,35 @@ class TestDatabase(DatabaseTestCase):
             ui3 = self.UserInfo.get_one(email='dennias.chiu@gmail.com1', for_update=True, t=_t)
             self.assertEqual(ui2.email, ui3.email)
             from time import sleep
-            sleep(4)
+            sleep(2)
             uis = self.UserInfo.get_many(userid=([1, 2, 3, 4, 5, 6], 'IN'), for_update=True, t=_t)
-            sleep(10)
+            sleep(2)
 
-    def test_05_drop_table(self):
-        self.user_info = self.UserInfo.new(email='dennias.chiu@gmail.com', username='dennias')
-        self.user_info.dbi.execute_sql('DROP TABLE UserInfo;')
+    def test_05_join(self):
+        with self.UserBodyInfo.start_transaction() as _t:
+            self.UserBodyInfo.drop(ifexists=True, t=_t)
+            sql = SQL("""
+            CREATE TABLE `UserBodyInfo` (
+              `id` bigint NOT NULL AUTO_INCREMENT,
+              `userid` bigint NOT NULL COMMENT '用户id',
+              `weight` DECIMAL(10,4) NOT NULL comment '售卖价格',
+              `createtime` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+              `updatetime` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+              PRIMARY KEY (`id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8;""")
+            self.UserBodyInfo.create(sql=sql, t=_t)
+            ui = self.UserInfo.get_one(email=('dennias.chiu@gmail.com1', 'LIKE'), for_update=True, t=_t)
+            ubi = self.UserBodyInfo.new(userid=ui.userid, weight=ui.height)
+            ubi.insert(t=_t)
+            join_table = self.UserInfo.join(self.UserBodyInfo, userid=self.UserBodyInfo.get_field('userid')).to_json()
+            ret = self.UserInfo.search_and_join(join_table=join_table, email='dennias.chiu@gmail.com1', t=_t)
+            self.assertEqual(ret.result[0]['username'], 'dennias1')
+            ret = self.UserInfo.search_and_join(
+                return_columns=['username', 'weight', 'height'], join_table=join_table, email='dennias.chiu@gmail.com1',
+                t=_t)
+            self.assertEqual(ret.result[0]['weight'], 188.0)
+
+    def test_06_drop_table(self):
+        with self.UserInfo.start_transaction() as _t:
+            self.UserInfo.drop(t=_t)
+            self.UserBodyInfo.drop(t=_t)

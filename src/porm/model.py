@@ -4,13 +4,14 @@ import logging
 from collections import OrderedDict
 from contextlib import contextmanager
 from copy import deepcopy
-from typing import List, Union
+from typing import List, Union, Dict
 
 from porm.databases.api.mysql import MyDBApi
 from porm.errors import ValidationError, EmptyError, ParamError
+from porm.orms import Field, Join, SQL
 from porm.parsers.mysql import parse, parse_join, ParsedResult
 from porm.types.core import VarcharType, BaseType, IntegerType
-from porm.utils import param_notempty, type_check, PormJsonEncoder
+from porm.utils import param_notempty, type_check, PormJsonEncoder, notnone_check
 
 __all__ = ("DBModel",)
 try:  # Python 2.7+
@@ -65,7 +66,7 @@ class DBModelMetaData(object):
     def __init__(self, database_name: str, table_name: str, **connection_config):
         self.database_name = database_name
         self.table_name = table_name
-        self._field_types = OrderedDict()
+        self._fields: Dict[str, Field] = OrderedDict()
         self._database = None
         self._connection_config = connection_config
         self._table = None
@@ -74,8 +75,8 @@ class DBModelMetaData(object):
     def _init_table(self):
         if self._table is None:
             self._table = Table(self.database_name, self.table_name)
-            for field_name, field_type in self._field_types.items():
-                if field_type.ispk():
+            for field_name, field_obj in self._fields.items():
+                if field_obj.type.ispk():
                     self._table.add_primary_key(field_name)
                 else:
                     self._table.add_column(field_name)
@@ -94,22 +95,30 @@ class DBModelMetaData(object):
 
     @property
     def fields(self):
-        return list(self._field_types.keys())
+        return list(self._fields.keys())
 
-    def has_field(self, field_name):
-        return field_name in self._field_types
+    @property
+    def fields_with_tablename(self):
+        tablename = self.get_full_table_name()
+        return ['{}.{}'.format(tablename, field) for field in self._fields.keys()]
+
+    def has_field(self, field_name) -> bool:
+        return field_name in self._fields
 
     @type_check(field_type=BaseType)
     def add_field(self, field_name: str, field_type: BaseType = VarcharType()):
         field_type.set_name(field_name)
-        self._field_types[field_name] = field_type
+        self._fields[field_name] = Field(field_name, field_type)
         if field_type.ispk():
             self.table.add_primary_key(field_name)
         else:
             self.table.add_column(field_name)
 
+    def get_field(self, field_name) -> Field:
+        return self._fields[field_name]
+
     def get_field_type(self, field_name: str) -> BaseType:
-        return self._field_types[field_name]
+        return self._fields[field_name].type
 
     def get_insert_sql_tpl(self, db: str = None, table: str = None, ignore: bool = False):
         """
@@ -146,49 +155,29 @@ class DBModelMetaData(object):
         dbtb = self._full_table_name(db=db, table=table)
         return """DELETE FROM {dbtb} WHERE {{filter}}""".format(dbtb=dbtb)
 
+    def get_drop_sql_tpl(self, db: str = None, table: str = None, ifexists: bool = False):
+        dbtb = self._full_table_name(db=db, table=table)
+        ifexists_str = 'IF EXISTS' if ifexists else ''
+        return """DROP TABLE {ifexists} {dbtb}""".format(ifexists=ifexists_str, dbtb=dbtb)
+
     def _full_table_name(self, db: str = None, table: str = None):
+        table = table.strip() if table is not None else table
         if table:
             if db:
                 db_name = db
             else:
                 db_name = self.table.database
-            if table:
-                table_name = table
+            db_name += '.'
+            if table.startswith(db_name):
+                dbtb = table
             else:
-                table_name = self.table.name
-            dbtb = '{}.{}'.format(db_name, table_name)
+                dbtb = db_name + table
         else:
             dbtb = self.table.full_name
         return dbtb
 
     def get_full_table_name(self, db: str = None, table: str = None):
-        if table:
-            if db:
-                db_name = db
-            else:
-                db_name = self.table.database
-            if table:
-                table_name = table
-            else:
-                table_name = self.table.name
-            dbtb = '{}.{}'.format(db_name, table_name)
-        else:
-            dbtb = self.table.full_name
-        return dbtb
-
-
-class SQL(object):
-    def __init__(self, sql: str, params: dict = None):
-        self._sql = sql
-        self._params = params
-
-    @property
-    def sql(self) -> str:
-        return self._sql
-
-    @property
-    def param(self) -> dict:
-        return self._params
+        return self._full_table_name(db=db, table=table)
 
 
 class DBModelMeta(type):
@@ -558,11 +547,11 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
     @classmethod
     def count(cls, return_columns='COUNT(1) as cnt', db=None, table=None, join_table=None, t=None, **terms) -> int:
         cls._check_meta()
-        cnt_table = table
+        cnt_table = cls.__META__.get_full_table_name(db=db, table=table)
         cnt_parsed = parse(**terms)
         if join_table:
             for join_t in join_table.keys():
-                join_parsed = parse_join(terms=join_table[join_t])
+                join_parsed = parse_join(**join_table[join_t])
                 cnt_table += ' JOIN {} ON ({}) '.format(join_t, join_parsed['filter'])
                 cnt_parsed['param'].update(join_parsed['param'])
         _get_sql_tpl = cls.__META__.get_select_sql_tpl(db=db, table=cnt_table)
@@ -597,7 +586,9 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
         return SearchResult(total=total_cnt, index=page - 1, size=size, result=rets)
 
     @classmethod
-    def search_and_join(cls, return_columns=None, order_by=None, db=None, table=None, t=None, join_table=None, **terms):
+    def search_and_join(
+            cls, return_columns=None, order_by=None, db=None, table=None, t=None, join_table=None,
+            **terms) -> SearchResult:
         """
         分页查询接口
         :param return_columns:
@@ -605,7 +596,7 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
         :param db:
         :param table:
         :param t: transaction
-        :param join_table: {'join_tablename': {'key': ('value', 'LIKE'), 'field1': ('\\field2\\', '=')}}
+        :param join_table: {'join_tablename': {'base_tablename.field1': ('value', 'LIKE'), 'base_tablename.field1': ('\\join_tablename.field2\\', '=')}}
         :param terms: {'key': ('value', 'LIKE')}
         :return:
         """
@@ -622,11 +613,11 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
             return SearchResult(total=total_cnt, index=page - 1, size=size, result=rets)
 
     @classmethod
-    def _get_by_parsed_terms(
+    def _query_by_parsed_terms(
             cls, return_columns=None, db=None, table=None, t=None, for_update=False, parsed: ParsedResult = None):
         cls._check_meta()
         if not return_columns:
-            return_columns = cls.__META__.fields
+            return_columns = cls.__META__.fields_with_tablename
         if not for_update:
             sql = cls.__META__.get_select_sql_tpl(db=db, table=table).format(
                 return_columns=', '.join(return_columns),
@@ -639,8 +630,22 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
             )
         param = parsed['param']
         mydb = MyDBApi(config=cls._get_db_conf(db=db), t=t)
-        rets = [cls.new(**json.loads(json.dumps(obj, cls=PormJsonEncoder))) for obj in mydb.query_many(sql, param)]
+        return mydb.query_many(sql, param)
+
+    @classmethod
+    def _get_by_parsed_terms(
+            cls, return_columns=None, db=None, table=None, t=None, for_update=False, parsed: ParsedResult = None):
+        rets = [
+            cls.new(**json.loads(json.dumps(obj, cls=PormJsonEncoder))) for obj in cls._query_by_parsed_terms(
+                return_columns=return_columns, db=db, table=table, t=t, for_update=for_update, parsed=parsed
+            )]
         return rets
+
+    @classmethod
+    def _join_get_by_parsed_terms(
+            cls, return_columns=None, db=None, table=None, t=None, for_update=False, parsed: ParsedResult = None):
+        return cls._query_by_parsed_terms(
+            return_columns=return_columns, db=db, table=table, t=t, for_update=for_update, parsed=parsed)
 
     @classmethod
     def get_many(
@@ -684,10 +689,10 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
         term_tablename = get_tablename if parse_with_tablename else None
         parsed = parse(tablename=term_tablename, order_by=order_by, **terms)
         for join_t in join_table.keys():
-            join_parsed = parse_join(terms=join_table[join_t])
+            join_parsed = parse_join(**join_table[join_t])
             get_tablename += ' JOIN {} ON ({}) '.format(join_t, join_parsed['filter'])
             parsed['param'].update(join_parsed['param'])
-        rets = cls._get_by_parsed_terms(
+        rets = cls._join_get_by_parsed_terms(
             return_columns=return_columns, db=db, table=get_tablename, t=t, for_update=for_update, parsed=parsed)
         return rets
 
@@ -748,6 +753,64 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
             _params = [obj.valid_fields for obj in objs]
         mydb = MyDBApi(config=cls._get_db_conf(), t=t)
         return mydb.insert_many(_sql_tpl, _params)
+
+    @classmethod
+    def get_tablename(cls, db: str = None) -> str:
+        """
+
+        :param db:
+        :return: full table name string like DB1.Table2
+        """
+        cls._check_meta()
+        return cls.__META__.get_full_table_name(db=db)
+
+    @classmethod
+    def get_field(cls, name: str) -> Field:
+        """
+
+        :param name:
+        :return:
+        """
+        cls._check_meta()
+        return cls.__META__.get_field(name)
+
+    @classmethod
+    def join(cls, join_table: DBModel.__class__, **eq_terms) -> Join:
+        """
+
+        :param join_table: DBModel class ob table to join
+        :param eq_terms:
+        :return:
+        """
+        cls._check_meta()
+        ret = Join(cls.__META__.get_full_table_name(), join_table.get_tablename(), **eq_terms)
+        return ret
+
+    @classmethod
+    def drop(cls, ifexists: bool = False, t=None):
+        """
+
+        :param ifexists:
+        :param t:
+        :return:
+        """
+        cls._check_meta()
+        mydb = MyDBApi(config=cls._get_db_conf(), t=t)
+        _sql = cls.__META__.get_drop_sql_tpl(ifexists=ifexists)
+        return mydb.delete(_sql)
+
+    @classmethod
+    @notnone_check('sql')
+    def create(cls, sql: SQL = None, t=None):
+        """
+
+        :param sql:
+        :param t:
+        :return:
+        """
+        cls._check_meta()
+        mydb = MyDBApi(config=cls._get_db_conf(), t=t)
+        return mydb.insert_one(sql.sql)
 
     @property
     def dbi(self) -> MyDBApi:
@@ -842,3 +905,19 @@ class SearchResult(dict):
                 'size': self['size']
             }
         }
+
+    @property
+    def total(self):
+        return self['total']
+
+    @property
+    def index(self):
+        return self['index']
+
+    @property
+    def size(self):
+        return self['size']
+
+    @property
+    def result(self):
+        return self['result']

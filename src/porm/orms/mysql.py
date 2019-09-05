@@ -1,8 +1,13 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+from collections import defaultdict
 from enum import Enum, unique
-from typing import Union
+from functools import partial
+from typing import Union, Dict
+
+from porm import BaseType, VarcharType
+from porm.utils import param_notnone
 
 
 @unique
@@ -198,3 +203,95 @@ class Condition(object):
     def or_condition(
             cls, c1: Union[ConditionNode, ConditionTree], c2: Union[ConditionNode, ConditionTree]) -> ConditionTree:
         return ConditionTree.new(c1, Relation.OR, c2)
+
+
+FIELD_NONE_VALUE = 'FieldNoneValue'
+
+
+class Field(object):
+    def __init__(self, column_name: str, column_type: BaseType = VarcharType(), column_value=FIELD_NONE_VALUE):
+        self._name = column_name
+        self._type = column_type
+        self._value = column_value if column_value != FIELD_NONE_VALUE else column_type.default
+
+    @property
+    def name(self) -> str:
+        """
+        column name
+        :return:
+        """
+        return self._name
+
+    @property
+    def type(self) -> BaseType:
+        """
+        column type
+        :return:
+        """
+        return self._type
+
+    @property
+    def value(self) -> any:
+        """
+        column value
+        :return:
+        """
+        return self._value
+
+
+class Join(object):
+    @param_notnone
+    def __init__(self, base_table: str, join_table: str, **eq_terms):
+        """
+        :param base_table: base table to join like A in select * from A join B
+        :param join_table: join table to join like B in select * from A join B
+        :param eq_terms: join conditions like id=Field('id') in select * from  A join B on (A.id=B.id)
+        """
+        # join_terms: {'join_tablename': {'key': ('value', 'LIKE'), 'field1': ('\\field2\\', '=')}}
+        self._join_terms: Dict[str, Dict[str, tuple]] = {join_table: {}}
+        self._set_terms(join_table, base_table, **eq_terms)
+
+    def _set_terms(self, join_table: str, base_table: str, **eq_terms):
+        join_term = self._join_terms.get(join_table, {})
+        for base_key, join_key in eq_terms.items():
+            if '.' not in base_key:
+                base_column = '{}.{}'.format(base_table, base_key)
+            else:
+                base_column = base_key
+            if isinstance(join_key, Field):
+                if '.' not in join_key.name:
+                    join_column = '{}.{}'.format(join_table, join_key.name)
+                else:
+                    join_column = join_key.name
+                join_column = '\\{}\\'.format(join_column)
+            else:
+                join_column = join_key
+            join_term[base_column] = (join_column, '=')
+        self._join_terms[join_table] = join_term
+
+    @param_notnone
+    def join(self, base_table, join_table, **eq_terms) -> Join:
+        self._set_terms(join_table, base_table, **eq_terms)
+        return self
+
+    def to_json(self) -> Dict[str, Dict[str, tuple]]:
+        """
+
+        :return: {'join_tablename': {'base_tablename.field1': ('value', 'LIKE'), 'base_tablename.field1': ('\\join_tablename.field2\\', '=')}}
+        """
+        return self._join_terms.copy()
+
+
+class SQL(object):
+
+    def __init__(self, sql: str, params: dict = None):
+        self._sql = sql
+        self._params = params
+
+    @property
+    def sql(self) -> str:
+        return self._sql
+
+    @property
+    def param(self) -> dict:
+        return self._params
