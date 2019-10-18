@@ -10,7 +10,7 @@ from porm.databases.api.mysql import MyDBApi
 from porm.errors import ValidationError, EmptyError, ParamError
 from porm.orms import Field, Join, SQL
 from porm.parsers.mysql import parse, parse_join, ParsedResult
-from porm.types.core import VarcharType, BaseType, IntegerType
+from porm.types.core import VarcharType, BaseType, IntegerType, DictType
 from porm.utils import param_notempty, type_check, PormJsonEncoder, notnone_check
 
 __all__ = ("DBModel",)
@@ -217,7 +217,7 @@ class DBModelMeta(type):
         if database_name:
             setattr(bases[0], '__DATABASE__', database_name)
         table_name = attrs.get('__TABLE__', name)
-        setattr(bases[0], '__TABLE__', table_name)
+        attrs['__TABLE__'] = table_name
         connection_config = attrs.get('__CONFIG__', None)
         if connection_config:
             setattr(bases[0], '__CONFIG__', connection_config)
@@ -422,7 +422,7 @@ class BaseDBModel(dict):
         #     return self.dbi
         # el
         if item in self.__META__.fields:
-            if item in self.valid_fields:
+            if self.is_valid_field(item):
                 return self._data[item]
             else:
                 raise EmptyError(u'Field: {} is Not Valid'.format(item))
@@ -432,6 +432,41 @@ class BaseDBModel(dict):
             # raise NotSupportError(
             #     u'Field: {} Not in Defined Field: {} of {}'.format(
             #         item, self.__META__.fields, self.__META__.get_full_table_name()))
+
+    def is_valid_field(self, field_name: str) -> bool:
+        """
+        Check field is valid or not:
+        1. A get method generated object
+        2. A new method generated object
+        3. A set method activated object field
+        including pk and columns
+        :return:
+        """
+        return self.__META__.has_field(field_name) and field_name in self._actived_fields
+
+    def get_valid_fields(self, for_save=True) -> OrderedDict:
+        """
+        Get the valid fields of:
+        1. A get method generated object
+        2. A new method generated object
+        3. A set method activated object field
+        including pk and columns
+        :return:
+        """
+        ret = OrderedDict()
+        for _fn, val in self._data.items():
+            if self.__META__.has_field(_fn) and _fn in self._actived_fields:
+                if for_save:
+                    _ft = self.__META__.get_field_type(field_name=_fn)
+                    if isinstance(_ft, DictType):
+                        ret[_fn] = _ft.dumps(val)
+                    else:
+                        ret[_fn] = _ft.dumps(val)
+                else:
+                    ret[_fn] = val
+            else:
+                continue
+        return ret
 
     @property
     def valid_fields(self) -> OrderedDict:
@@ -466,16 +501,23 @@ class BaseDBModel(dict):
                 ret[pk] = self._data.get(pk, self.__META__.get_field_type(pk).default)
         return ret
 
-    @property
-    def column_fields(self) -> OrderedDict:
+    def get_column_fields(self, for_save=True) -> OrderedDict:
         ret = OrderedDict()
         for col in self.__META__.table.columns:
-            if col in self._actived_fields:
-                ret[col] = self._data.get(col, self.__META__.get_field_type(col).default)
+            if self.is_valid_field(col):
+                _ft = self.__META__.get_field_type(col)
+                if for_save:
+                    ret[col] = _ft.dumps(self._data.get(col, _ft.default))
+                else:
+                    ret[col] = self._data.get(col, _ft.default)
         return ret
 
+    @property
+    def column_fields(self) -> OrderedDict:
+        return self.get_column_fields(for_save=False)
+
     def _render_insert(self, ignore=False) -> SQL:
-        _valid_fields = self.valid_fields
+        _valid_fields = self.get_valid_fields(for_save=True)
         fields = list(_valid_fields.keys())
         _sql_tpl = self.__META__.get_insert_sql_tpl(ignore=ignore)
         _sql = _sql_tpl.format(
@@ -494,7 +536,7 @@ class BaseDBModel(dict):
 
     @property
     def _upsert_sql(self) -> SQL:
-        _valid_fields = self.valid_fields
+        _valid_fields = self.get_valid_fields(for_save=True)
         _sql_tpl = self.__META__.get_upsert_sql_tpl()
         _sql = _sql_tpl.format(
             col=', '.join(self.valid_fields.keys()),
@@ -505,7 +547,7 @@ class BaseDBModel(dict):
 
     @property
     def _update_sql(self) -> SQL:
-        _valid_fields = self.column_fields
+        _valid_fields = self.get_column_fields(for_save=True)
         _sql = self.__META__.get_update_sql_tpl().format(
             update_columns=', '.join(['{f}=%({f})s'.format(f=field) for field in _valid_fields.keys()]),
             filter='{filter}'
@@ -755,7 +797,7 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
             # 如果生成的sql不一样，说明存在不同的插入对象
             # 这种情况可能会存在插入Null值，请注意
             _sql_tpl = cls._insert_ignore_sql if ignore else cls._insert_sql
-            _params = [obj.valid_fields for obj in objs]
+            _params = [obj.get_valid_fields(for_save=True) for obj in objs]
         mydb = MyDBApi(config=cls._get_db_conf(), t=t)
         return mydb.insert_many(_sql_tpl, _params)
 
@@ -830,12 +872,12 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
         return MyDBApi(config=self._get_db_conf())
 
     def upsert(self, t=None, *update_fields):
-        _valid_fields = self.valid_fields
+        _valid_fields = self.get_valid_fields(for_save=True)
         if not update_fields:
             update_fields = list(_valid_fields.keys())
         sql = self.__META__.get_upsert_sql_tpl().format(
             update_fields=', '.join('{field}=%({field})s'.format(field=field) for field in update_fields))
-        param = self.valid_fields
+        param = _valid_fields
         mydb = MyDBApi(config=self._get_db_conf(), t=t)
         return mydb.insert_one(sql, param)
 

@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
 import datetime
+import json
 import sys
 from abc import ABCMeta, abstractmethod
+from functools import partial
+
+import pymysql
 from dateutil import parser
 
 import six
@@ -18,7 +22,8 @@ __all__ = (
     "DatetimeType",
     "TimestampType",
     "FloatType",
-    "TimeType"
+    "TimeType",
+    "DictType"
 )
 
 
@@ -93,6 +98,9 @@ class BaseType(metaclass=ABCMeta):
             raise ValidationError(u'{}: is not null but got null'.format(self.name or 'value'))
         return val
 
+    def dumps(self, val: object) -> object:
+        return self.validate(val)
+
 
 class VarcharType(BaseType):
     # if py2 _TYPE = unicode
@@ -110,12 +118,15 @@ class VarcharType(BaseType):
     @field_exception
     def validate(self, val):
         super().validate(val)
-        val = self.type(val)
-        if not isinstance(val, six.string_types):
-            raise ValidationError(u'{}: {} is not string type'.format(self.name or 'value', val))
-        if len(val) > self.length:
-            raise ValidationError(u'{}: {} is not over size: {}'.format(self.name or 'value', val, self.length))
-        return val
+        if val is None:
+            return val
+        else:
+            val = self.type(val)
+            if not isinstance(val, six.string_types):
+                raise ValidationError(u'{}: {} is not string type'.format(self.name or 'value', val))
+            if len(val) > self.length:
+                raise ValidationError(u'{}: {} is not over size: {}'.format(self.name or 'value', val, self.length))
+            return val
 
 
 class TextType(VarcharType):
@@ -237,3 +248,30 @@ class TimeType(BaseType):
         else:
             raise ValidationError(u'{}: {} is not string type or {} type'.format(self.name or 'value', val, self.type))
         return val
+
+
+class DictType(BaseType):
+    _TYPE = partial(json.loads)
+    _DEFAULT = {}
+
+    def __init__(self, *args, **kwargs):
+        super(DictType, self).__init__(*args, **kwargs)
+
+    @field_exception
+    def validate(self, val):
+        super().validate(val)
+        if isinstance(val, str):
+            val = self.type(val)
+        elif isinstance(val, dict):
+            val = val
+        else:
+            raise ValidationError(u'{}: {} is not string type or {} type'.format(self.name or 'value', val, self.type))
+        return val
+
+    def dumps(self, val):
+        val = self.validate(val)
+        # return val
+        # return pymysql.escape_string(json.dumps(val))
+        return json.dumps(val)
+        # return pymysql.escape_string(json.dumps(pymysql.escape_dict(val, 'utf-8')))
+        # return pymysql.escape_dict(val, 'utf-8')
