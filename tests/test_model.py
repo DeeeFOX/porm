@@ -3,7 +3,7 @@ import json
 
 import pymysql
 
-from porm import IntegerType, VarcharType, TextType, DatetimeType, FloatType
+from porm import IntegerType, VarcharType, TextType, DatetimeType, FloatType, BooleanType
 from porm.model import DBModel
 from porm.orms import SQL
 from porm.types.core import TimeType, DictType
@@ -59,6 +59,7 @@ class BodyInfoBase(TestModel):
 class UserBodyInfo(BodyInfoBase):
     weight = FloatType(required=True)
     userid = IntegerType(required=True)
+    someone = BooleanType(required=True)
 
 
 class TestDatabase(DatabaseTestCase):
@@ -155,11 +156,12 @@ class TestDatabase(DatabaseTestCase):
               `weight` DECIMAL(10,4) NOT NULL comment '售卖价格',
               `createtime` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
               `updatetime` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+              `someone` boolean NOT NULL COMMENT '布尔类型',
               PRIMARY KEY (`id`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8;""")
             UserBodyInfo.create(sql=sql, t=_t)
             ui = UserInfo.get_one(email=('dennias.chiu@gmail.com1', 'LIKE'), for_update=True, t=_t)
-            ubi = UserBodyInfo.new(userid=ui.userid, weight=ui.height)
+            ubi = UserBodyInfo.new(userid=ui.userid, weight=ui.height, someone=True)
             ubi.insert(t=_t)
             join_table = UserInfo.join(UserBodyInfo, userid=UserBodyInfo.get_field('userid')).to_json()
             ret = UserInfo.search_and_join(join_table=join_table, email='dennias.chiu@gmail.com1', t=_t)

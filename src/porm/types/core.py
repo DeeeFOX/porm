@@ -23,7 +23,8 @@ __all__ = (
     "TimestampType",
     "FloatType",
     "TimeType",
-    "DictType"
+    "DictType",
+    "BooleanType"
 )
 
 
@@ -270,8 +271,13 @@ class DictType(BaseType):
 
     def dumps(self, val):
         val = self.validate(val)
-        # return val
-        # return pymysql.escape_string(json.dumps(val))
         return json.dumps(val)
-        # return pymysql.escape_string(json.dumps(pymysql.escape_dict(val, 'utf-8')))
-        # return pymysql.escape_dict(val, 'utf-8')
+
+
+class BooleanType(BaseType):
+    _TYPE = bool
+    _DEFAULT = False
+
+    @field_exception
+    def validate(self, val):
+        return self.type(val)
