@@ -30,6 +30,10 @@ def parse_join(**terms) -> ParsedResult:
         f_fname = u'joinfltr_{}'.format(field_name)
         if isinstance(term, (list, tuple)):
             operator = term[1]
+            if len(term) == 3:
+                relation = u' {} '.format(term[2])
+            else:
+                relation = u' AND '
             term = term[0]
             if isinstance(term, (list, tuple)):
                 # range query
@@ -57,7 +61,11 @@ def parse_join(**terms) -> ParsedResult:
                             field_name=f_fname, op=operator, field_val_key=field_val_key
                         ))
                         sql_params[field_val_key] = u'%{}%'.format(kw)
-                    term_sql = u' AND '.join(like_term_sql)
+                    _tsql = relation.join(like_term_sql).strip()
+                    if _tsql:
+                        term_sql = u' ( {} ) '.format(_tsql)
+                    else:
+                        term_sql = _tsql
                 else:
                     left_val = term[0]
                     left_op = operator[0]
@@ -86,7 +94,11 @@ def parse_join(**terms) -> ParsedResult:
                         range_term_sql.append(u"{field_name}{op}%({right})s".format(
                             field_name=field_name, op=right_op, right=right_field_name))
                         sql_params[right_field_name] = right_val
-                    term_sql = ' AND '.join(range_term_sql)
+                    _tsql = relation.join(range_term_sql)
+                    if _tsql:
+                        term_sql = u' ( {} ) '.format(_tsql)
+                    else:
+                        term_sql = _tsql
             else:
                 # operator query
                 if term is None:
@@ -136,6 +148,10 @@ def parse(tablename=None, order_by=None, page=None, size=None, **terms) -> Parse
         fname = u'{}.{}'.format(tablename, fname) if tablename else fname
         if isinstance(term, (list, tuple)):
             operator = term[1].strip()
+            if len(term) == 3:
+                relation = u' {} '.format(term[2])
+            else:
+                relation = u' AND '
             term = term[0]
             term_sql = u''
             if isinstance(term, (list, tuple)):
@@ -164,7 +180,11 @@ def parse(tablename=None, order_by=None, page=None, size=None, **terms) -> Parse
                             field_name=fname, op=operator, field_val_key=field_val_key
                         ))
                         sql_params[field_val_key] = u'%{}%'.format(kw)
-                    term_sql = u' AND '.join(like_term_sql)
+                    _tsql = relation.join(like_term_sql).strip()
+                    if _tsql:
+                        term_sql = ' ( {} ) '.format(_tsql)
+                    else:
+                        term_sql = _tsql
                 else:
                     left_val = term[0]
                     left_op = operator[0]
@@ -193,7 +213,11 @@ def parse(tablename=None, order_by=None, page=None, size=None, **terms) -> Parse
                         range_term_sql.append(u"{field_name}{op}%({right})s".format(
                             field_name=fname, op=right_op, right=right_field_name))
                         sql_params[right_field_name] = right_val
-                    term_sql = ' AND '.join(range_term_sql)
+                    _tsql = relation.join(range_term_sql).strip()
+                    if _tsql:
+                        term_sql = ' ( {} ) '.format(_tsql)
+                    else:
+                        term_sql = _tsql
             else:
                 # operator query
                 if term is None:

@@ -944,6 +944,7 @@ class SearchResult(dict):
         super(SearchResult, self).__init__(*args, **kwargs)
         self['total'] = total
         self['index'] = index
+        self['page'] = index + 1
         self['size'] = size
         self['result'] = result
 
@@ -955,6 +956,7 @@ class SearchResult(dict):
         return {
             'data': self['result'],
             'pagination': {
+                'page': self['page'],
                 'index': self['index'],
                 'total': self['total'],
                 'size': self['size']
@@ -972,6 +974,10 @@ class SearchResult(dict):
     @property
     def size(self):
         return self['size']
+
+    @property
+    def page(self):
+        return self['page']
 
     @property
     def result(self):
