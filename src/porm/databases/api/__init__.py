@@ -365,7 +365,7 @@ class DBApi(_callable_context_manager):
                 raise InterfaceError('Error, database connection not opened.')
         return self._state.conn.cursor()
 
-    def execute_sql(self, sql, params: tuple=None, commit=SENTINEL):
+    def execute_sql(self, sql, params: tuple = None, commit=SENTINEL):
         logger.debug((sql, params))
         if commit is SENTINEL:
             if self.in_transaction():
@@ -386,7 +386,7 @@ class DBApi(_callable_context_manager):
                     self.commit()
         return cursor
 
-    def execute_sqls(self, sql, params: List[tuple]=None, commit=SENTINEL):
+    def execute_sqls(self, sql, params: List[tuple] = None, commit=SENTINEL):
         logger.debug((sql, params))
         if commit is SENTINEL:
             if self.in_transaction():

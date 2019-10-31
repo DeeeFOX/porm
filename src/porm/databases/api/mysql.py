@@ -51,7 +51,7 @@ class MyDBApi(DBApi):
 
     @classmethod
     def _log(cls, sql, param, level='info'):
-        exec_sql = sql % param
+        exec_sql = (sql, param)
         getattr(logger, level, 'info')(exec_sql)
 
     @classmethod
