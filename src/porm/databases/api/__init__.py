@@ -3,7 +3,7 @@ import threading
 import uuid
 import warnings
 from functools import wraps
-from typing import List
+from typing import List, Dict
 
 from porm.errors import InterfaceError, OperationalError, __exception_wrapper__
 
@@ -198,19 +198,35 @@ class DBApi(_callable_context_manager):
 
     def __init__(
             self, database_name=None, db=None, thread_safe=True, autorollback=False, autocommit=None, autoconnect=True,
-            t=None, **config):
+            t: _transaction = None, **config):
+        if t:
+            other_dbi = t.db
+            self.set_init_config(**other_dbi.get_init_config())
+            self._state = other_dbi.state
+            self._lock = other_dbi.lock
+            self.connect_params = {}
+            self.connect_params.update(config)
+            self.deferred = not bool(self.conn)
+        else:
+            self.set_init_config(
+                database_name=database_name, db=db, thread_safe=thread_safe, autorollback=autorollback,
+                autocommit=autocommit, autoconnect=autoconnect)
+            if thread_safe:
+                self._state = _ConnectionLocal()
+                self._lock = threading.Lock()
+            else:
+                self._state = _ConnectionState()
+                self._lock = _NoopLock()
+            self.connect_params = {}
+            self.deferred = False
+            self.init(autocommit=self.autocommit, **config)
 
+    def set_init_config(
+            self, database_name=None, db=None, thread_safe=True, autorollback=False, autocommit=None, autoconnect=True):
         self.autoconnect = autoconnect
         self.autorollback = autorollback
         self.thread_safe = thread_safe
         self.database_name = db or database_name
-        if thread_safe:
-            self._state = _ConnectionLocal()
-            self._lock = threading.Lock()
-        else:
-            self._state = _ConnectionState()
-            self._lock = _NoopLock()
-
         if autocommit is not None:
             __deprecated__('Porm is learned from Peewee that no longer uses the "autocommit" option, as '
                            'the semantics now require it to always be True. '
@@ -224,9 +240,15 @@ class DBApi(_callable_context_manager):
         else:
             self.autocommit = autocommit
 
-        self.connect_params = {}
-        self.deferred = False
-        self.init(conn=t, autocommit=self.autocommit, **config)
+    def get_init_config(self) -> Dict:
+        return {
+            'database_name': self.database_name,
+            'db': self.database_name,
+            'thread_safe': self.thread_safe,
+            'autorollback': self.autorollback,
+            'autocommit': self.autocommit,
+            'autoconnect': self.autoconnect
+        }
 
     def _connect(self):
         """
@@ -243,7 +265,7 @@ class DBApi(_callable_context_manager):
         """
         raise NotImplementedError
 
-    def connect(self, reuse_if_open=False, conn=None):
+    def connect(self, reuse_if_open=False):
         with self._lock:
             if self.deferred:
                 raise InterfaceError('Error, database must be initialized '
@@ -254,10 +276,18 @@ class DBApi(_callable_context_manager):
                 raise OperationalError('Connection already opened.')
             self._state.reset()
             with __exception_wrapper__:
-                new_conn = conn or self._connect()
+                new_conn = self._connect()
                 self._state.set_connection(new_conn)
                 self._initialize_connection(self._state.conn)
         return True
+
+    @property
+    def state(self):
+        return self._state
+
+    @property
+    def lock(self):
+        return self._lock
 
     @property
     def conn(self):
@@ -265,11 +295,11 @@ class DBApi(_callable_context_manager):
             self.connect()
         return self._state.conn
 
-    def init(self, conn=None, **config):
+    def init(self, **config):
         if not self.is_closed():
             self.close()
         self.connect_params.update(config)
-        self.connect(conn=conn)
+        self.connect()
         self.deferred = not bool(self.conn)
 
     def session_start(self):
@@ -314,14 +344,19 @@ class DBApi(_callable_context_manager):
         return _atomic(self)
 
     def transaction(self):
-        return _transaction(self)
+        return _transaction(self, self._lock)
 
     def savepoint(self):
         return _savepoint(self)
 
-    def begin(self):
+    def begin(self, _lock_type=None):
         if self.is_closed():
             self.connect()
+        if _lock_type:
+            # do with lock type
+            self._state.conn.begin()
+        else:
+            self._state.conn.begin()
 
     def commit(self):
         return self._state.conn.commit()

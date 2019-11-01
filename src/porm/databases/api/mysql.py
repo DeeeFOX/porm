@@ -3,7 +3,7 @@ import logging
 
 import pymysql
 
-from porm.databases.api import DBApi
+from porm.databases.api import DBApi, _transaction
 from porm.databases.api.drivers import mysql as driver
 from porm.errors import EmptyError
 
@@ -30,7 +30,7 @@ CONN_CONF = {
 class MyDBApi(DBApi):
 
     def __init__(self, database_name=None, thread_safe=True, autorollback=False, autocommit=None, autoconnect=True,
-                 t=None, **config):
+                 t: _transaction = None, **config):
         config.update(config.pop('config', {}))
         config['database_name'] = database_name
         config['thread_safe'] = thread_safe
@@ -96,7 +96,7 @@ class MyDBApi(DBApi):
                 cursor.execute("SET AUTOCOMMIT=%s;" % auto)
 
     @contextlib.contextmanager
-    def start_transaction(self):
+    def start_transaction(self) -> _transaction:
         """
         Start a new transaction of this connection
         :return:
@@ -104,8 +104,8 @@ class MyDBApi(DBApi):
         _auto = self._get_autocommit(self.conn)
         try:
             self._set_autocommit(self.conn, False)
-            self.session_start()
-            yield self.conn
+            _t = self.session_start()
+            yield _t
         except Exception as ex:
             self._log(str(ex), {}, level='error')
             self.session_rollback()

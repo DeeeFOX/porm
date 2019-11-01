@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from typing import List, Union, Dict
 
+from porm.databases.api import _transaction
 from porm.databases.api.mysql import MyDBApi
 from porm.errors import ValidationError, EmptyError, ParamError
 from porm.orms import Field, Join, SQL
@@ -584,15 +585,17 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
 
     @classmethod
     @contextmanager
-    def start_transaction(cls, db=None):
+    def start_transaction(cls, db=None) -> _transaction:
         cls._check_meta()
         config = cls._get_db_conf(db=db)
-        dbi = MyDBApi(config=config)
-        with dbi.start_transaction() as _t:
+        mydb = MyDBApi(config=config)
+        with mydb.start_transaction() as _t:
             yield _t
 
     @classmethod
-    def count(cls, return_columns='COUNT(1) as cnt', db=None, table=None, join_table=None, t=None, **terms) -> int:
+    def count(
+            cls, return_columns='COUNT(1) as cnt', db=None, table=None, join_table=None, t: _transaction = None,
+            **terms) -> int:
         cls._check_meta()
         cnt_table = cls.__META__.get_full_table_name(db=db, table=table)
         cnt_parsed = parse(**terms)
@@ -612,7 +615,9 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
         return int(total_cnt)
 
     @classmethod
-    def search(cls, return_columns=None, order_by=None, db=None, table=None, t=None, **terms) -> SearchResult:
+    def search(
+            cls, return_columns=None, order_by=None, db=None, table=None, t: _transaction = None,
+            **terms) -> SearchResult:
         """
         分页查询接口
         :param return_columns:
@@ -634,7 +639,7 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
 
     @classmethod
     def search_and_join(
-            cls, return_columns=None, order_by=None, db=None, table=None, t=None, join_table=None,
+            cls, return_columns=None, order_by=None, db=None, table=None, t: _transaction = None, join_table=None,
             **terms) -> SearchResult:
         """
         分页查询接口
@@ -696,7 +701,8 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
 
     @classmethod
     def get_many(
-            cls, return_columns=None, order_by=None, db=None, table=None, t=None, for_update=False, **terms) -> list:
+            cls, return_columns=None, order_by=None, db=None, table=None, t: _transaction = None, for_update=False,
+            **terms) -> list:
         """
         全量查询接口
         :param return_columns:
@@ -716,8 +722,8 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
 
     @classmethod
     def get_many_and_join(
-            cls, return_columns=None, order_by=None, db=None, get_tablename=None, t=None, for_update=False,
-            join_table=None, parse_with_tablename=False, **terms) -> List[DBModel]:
+            cls, return_columns=None, order_by=None, db=None, get_tablename=None, t: _transaction = None,
+            for_update=False, join_table=None, parse_with_tablename=False, **terms) -> List[DBModel]:
         """
         全量连接查询接口
         :param return_columns:
@@ -744,7 +750,7 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
         return rets
 
     @classmethod
-    def get_one(cls, return_columns=None, t=None, for_update=False, **kwargs) -> Union[None, DBModel]:
+    def get_one(cls, return_columns=None, t: _transaction = None, for_update=False, **kwargs) -> Union[None, DBModel]:
         _l = cls.get_many(return_columns=return_columns, t=t, for_update=for_update, page=0, size=1, **kwargs)
         if _l:
             return _l[0]
@@ -752,7 +758,7 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
             return None
 
     @classmethod
-    def delete_many(cls, t=None, **terms):
+    def delete_many(cls, t: _transaction = None, **terms):
         """
         批量查询接口
         :param t:
@@ -770,7 +776,7 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
         return mydb.delete(sql, param)
 
     @classmethod
-    def insert_many(cls, objs: List[BaseDBModel], t=None, ignore=False):
+    def insert_many(cls, objs: List[BaseDBModel], t: _transaction = None, ignore=False):
         """
         批量插入接口
         :param objs:
@@ -842,7 +848,7 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
         return ret
 
     @classmethod
-    def drop(cls, ifexists: bool = False, t=None):
+    def drop(cls, ifexists: bool = False, t: _transaction = None):
         """
 
         :param ifexists:
@@ -856,7 +862,7 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
 
     @classmethod
     @notnone_check('sql')
-    def create(cls, sql: SQL = None, t=None):
+    def create(cls, sql: SQL = None, t: _transaction = None):
         """
 
         :param sql:
@@ -871,7 +877,7 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
     def dbi(self) -> MyDBApi:
         return MyDBApi(config=self._get_db_conf())
 
-    def upsert(self, t=None, *update_fields):
+    def upsert(self, t: _transaction = None, *update_fields):
         _valid_fields = self.get_valid_fields(for_save=True)
         if not update_fields:
             update_fields = list(_valid_fields.keys())
@@ -881,7 +887,7 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
         mydb = MyDBApi(config=self._get_db_conf(), t=t)
         return mydb.insert_one(sql, param)
 
-    def insert(self, t=None):
+    def insert(self, t: _transaction = None):
         mydb = MyDBApi(config=self._get_db_conf(), t=t)
         sql_obj = self._insert_sql
         return mydb.insert_one(sql_obj.sql, param=sql_obj.param)
@@ -896,7 +902,7 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
             if f in self.__META__.table.columns:
                 self[f] = v
 
-    def update(self, t=None, **filters):
+    def update(self, t: _transaction = None, **filters):
         """
         使用当前对象的值去更新数据库记录
         :param t:
@@ -917,7 +923,7 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
         mydb = MyDBApi(config=self._get_db_conf(), t=t)
         return mydb.insert_one(sql, param)
 
-    def delete(self, t=None):
+    def delete(self, t: _transaction = None):
         """
         删除当前对象对应的数据库记录
         :param t:

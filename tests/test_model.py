@@ -92,16 +92,18 @@ class TestDatabase(DatabaseTestCase):
                 email='dennias.chiu@gmail.com', username='dennias', height=188,
                 start_time=datetime.time.fromisoformat('08:00:00'), properties={'abc': 'yoyo'})
             self.user_info.insert(t=_t)
+            obj = UserInfo.get_one(email='dennias.chiu@gmail.com', username='dennias')
+            self.assertIsNone(obj)
             obj = UserInfo.get_one(email='dennias.chiu@gmail.com', username='dennias', t=_t)
             self.assertEqual(obj['start_time'], datetime.time(8, 0))
             self.assertIsNotNone(obj)
             obj.reset(email='123@123.com')
             obj.update(t=_t)
-            obj = UserInfo.get_one(email='123@123.com')
+            obj = UserInfo.get_one(email='123@123.com', t=_t)
             self.assertIsNotNone(obj)
             self.assertEqual(obj.email, '123@123.com')
             obj.delete(t=_t)
-            obj = UserInfo.get_one(email='123@123.com')
+            obj = UserInfo.get_one(email='123@123.com', t=_t)
             self.assertIsNone(obj)
             u1 = UserInfo.new(email='dennias.chiu@gmail.com1', username='dennias1', height=188,
                               properties={"yooyo": "hahaha"})
@@ -122,7 +124,7 @@ class TestDatabase(DatabaseTestCase):
                                       properties={"yooyo": "hahaha"})
         with self.user_info.dbi.start_transaction() as _t:
             self.user_info.insert(t=_t)
-            obj = UserInfo.get_one(email='dennias.chiu@gmail.com', username='dennias')
+            obj = UserInfo.get_one(email='dennias.chiu@gmail.com', username='dennias', t=_t)
             json_objstr = json.dumps(obj)
             json_obj = json.loads(json_objstr)
             self.assertIsNotNone(json_obj)
@@ -175,7 +177,19 @@ class TestDatabase(DatabaseTestCase):
                 email='dennias.chiu@gmail.com1', t=_t)
             self.assertEqual(ret.result[0]['weight'], 188.0)
 
-    def test_06_drop_table(self):
+    def test_06_transaction_failed(self):
+        ui = UserInfo.new(
+            email='312dennias.chiu@gmail.com', username='dennias', height=180,
+            properties={"yooyo": "hahaha"})
+        try:
+            with ui.start_transaction() as _t:
+                ui.insert(t=_t)
+                raise Exception
+        except Exception as ex:
+            pass
+        self.assertIsNone(UserInfo.get_one(email='312dennias.chiu@gmail.com'))
+
+    def test_99_drop_table(self):
         with UserInfo.start_transaction() as _t:
             UserInfo.drop(t=_t)
             UserBodyInfo.drop(t=_t)
