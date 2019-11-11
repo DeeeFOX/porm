@@ -229,7 +229,7 @@ class FloatType(IntegerType):
 
 class TimeType(BaseType):
     _TYPE = datetime.time
-    _DEFAULT = datetime.time.fromisoformat('08:00:00')
+    _DEFAULT = parser.isoparser().parse_isotime('08:00:00')
     _FORMAT = '%H:%M:%S'
 
     def __init__(self, *args, **kwargs):
@@ -241,7 +241,7 @@ class TimeType(BaseType):
         super().validate(val)
         if isinstance(val, six.string_types):
             try:
-                val = datetime.time.fromisoformat(val)
+                val = parser.isoparser().parse_isotime(val)
             except Exception:
                 val = parser.parse(val)
         elif isinstance(val, self.type):

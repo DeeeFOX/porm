@@ -585,9 +585,12 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
 
     @classmethod
     @contextmanager
-    def start_transaction(cls, db=None) -> _transaction:
+    def start_transaction(cls, db: Union[str, dict]=None) -> _transaction:
         cls._check_meta()
-        config = cls._get_db_conf(db=db)
+        if isinstance(db, dict):
+            config = db
+        else:
+            config = cls._get_db_conf(db=db)
         mydb = MyDBApi(config=config)
         with mydb.start_transaction() as _t:
             yield _t
