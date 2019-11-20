@@ -6,8 +6,6 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
-    volumes:
-      db_data: {}
     services:
       mysql:
         image: mysql:5.7
@@ -15,13 +13,14 @@ jobs:
           MYSQL_ROOT_PASSWORD: root
           MYSQL_HOST: localhost
           MYSQL_PORT: 3306
-          MYSQL_DATABASE: porm_database_test
         ports:
           - 3306
-        volumes:
-          - db_data:/var/lib/mysql/data
         options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
     steps:
+      - name: Verify MySQL connection from host
+        run: |
+          sudo apt-get install -y mysql-client
+          mysql --host 127.0.0.1 --port ${{ job.services.mysql.ports['3306'] }} -uroot -proot -e "CREATE DATABASE IF NOT EXISTS porm_database_test"
       - uses: actions/checkout@v1
       - name: Set up Python 3.7
         uses: actions/setup-python@v1
