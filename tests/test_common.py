@@ -4,7 +4,7 @@ from contextlib import contextmanager
 
 from tests.context import logger, QueryLogHandler, db_loader
 
-db = db_loader('mysql', 'porm_test', user='root', host='localhost', port=3306)
+db = db_loader('mysql', 'porm_test', user='root', passord='root', host='localhost', port=3306)
 
 
 class BaseTestCase(unittest.TestCase):
