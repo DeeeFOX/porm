@@ -16,6 +16,8 @@ jobs:
           MYSQL_DATABASE: porm_database_test
         ports:
           - 3306
+        volumes:
+          - db_data:/var/lib/mysql/data
         options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
     steps:
       - uses: actions/checkout@v1
