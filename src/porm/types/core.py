@@ -5,7 +5,6 @@ import sys
 from abc import ABCMeta, abstractmethod
 from functools import partial
 
-import pymysql
 from dateutil import parser
 
 import six
