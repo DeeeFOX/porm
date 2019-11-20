@@ -11,12 +11,12 @@ from tests.test_common import DatabaseTestCase
 
 
 class TestModel(DBModel):
-    __DATABASE__ = 'PORM_DATABASE_TEST'
+    __DATABASE__ = 'porm_database_test'
     __CONFIG__ = {
         'host': 'localhost',
         'user': 'root',
         'passowrd': 'root',
-        'db': 'PORM_DATABASE_TEST',
+        'db': 'porm_database_test',
         'charset': 'utf8',
         'autocommit': 0,  # default 0
         'cursorclass': pymysql.cursors.DictCursor
