@@ -15,6 +15,7 @@ class TestModel(DBModel):
     __CONFIG__ = {
         'host': 'localhost',
         'user': 'root',
+        'passowrd': 'root',
         'db': 'PORM_DATABASE_TEST',
         'charset': 'utf8',
         'autocommit': 0,  # default 0
