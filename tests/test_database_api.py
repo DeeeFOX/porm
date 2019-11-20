@@ -3,7 +3,7 @@ from tests.test_common import DatabaseTestCase
 
 
 class TestDatabase(DatabaseTestCase):
-    api = db_loader('mysql', name='porm_database_test', user='root', host='localhost', port=3306)
+    api = db_loader('mysql', name='porm_database_test', user='root', password='root', host='localhost', port=3306)
 
     def test_execute_sql(self):
         self.api.execute_sql('CREATE TABLE register (val INTEGER);')
