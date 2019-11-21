@@ -10,8 +10,13 @@ this_directory = path.abspath(path.dirname(__file__))
 with io.open(path.join(this_directory, "README.md"), "rt", encoding="utf-8") as fd:
     readme = fd.read()
 
-with io.open("src/porm/__init__.py", "rt", encoding="utf-8") as f:
-    version = re.search(r"__version__ = \"(.*?)\"", f.read()).group(1)
+from pkg_resources import get_distribution, DistributionNotFound
+
+try:
+    __version__ = get_distribution('Porm').py_version
+except DistributionNotFound:
+    with io.open("src/porm/__init__.py", "rt", encoding="utf-8") as f:
+        __version__ = re.search(r"__version__ = \"(.*?)\"", f.read()).group(1)
 
 reqs = [
     'pymysql==0.9.3',
@@ -20,7 +25,7 @@ reqs = [
 
 setup(
     name="Porm",
-    version=version,
+    version=__version__,
     url="https://github.com/DeeeFOX/porm",
     project_urls=OrderedDict(
         (
@@ -56,5 +61,9 @@ setup(
         "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
-    install_requires=reqs
+    install_requires=reqs,
+    use_scm_version={'tag_regex': r'^(?P<prefix>v)?(?P<version>[^\+]+)(?P<suffix>.*)?$',
+                     # '{next_version}.dev{distance}+{scm letter}{revision hash}.dYYYMMMDD',
+                     "fallback_version": __version__, "relative_to": __file__},
+    setup_requires=['setuptools_scm'],
 )
