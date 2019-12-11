@@ -915,14 +915,12 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
 
         if not filters:
             filters = self.pk_fields
-        f = []
         sql_obj = self._update_sql
         sql = sql_obj.sql
         param = sql_obj.param
-        for key, val in filters.items():
-            f.append(u'{key}=%(f_{key})s'.format(key=key))
-            param[u'f_' + key] = val
-        sql = sql.format(filter=' AND '.join(f))
+        parsed = parse(**filters)
+        param.update(parsed['param'])
+        sql = sql.format(filter=parsed['filter'])
         mydb = MyDBApi(config=self._get_db_conf(), t=t)
         return mydb.insert_one(sql, param)
 
