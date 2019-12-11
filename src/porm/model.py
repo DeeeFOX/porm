@@ -915,7 +915,6 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
 
         if not filters:
             filters = self.pk_fields
-        f = []
         sql_obj = self._update_sql
         sql = sql_obj.sql
         param = sql_obj.param
