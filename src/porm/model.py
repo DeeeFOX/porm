@@ -918,7 +918,7 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
         sql_obj = self._update_sql
         sql = sql_obj.sql
         param = sql_obj.param
-        parsed = parse(filters)
+        parsed = parse(**filters)
         param.update(parsed['param'])
         sql = sql.format(filter=parsed['filter'])
         mydb = MyDBApi(config=self._get_db_conf(), t=t)
