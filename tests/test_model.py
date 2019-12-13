@@ -190,6 +190,20 @@ class TestDatabase(DatabaseTestCase):
             pass
         self.assertIsNone(UserInfo.get_one(email='312dennias.chiu@gmail.com'))
 
+    def test_07_duplicate_key(self):
+        ui = UserInfo.new(
+            email='dennias.chiu@gmail.com1', username='dennias', height=180,
+            properties={"yooyo": "hahaha"})
+        try:
+            with ui.start_transaction() as _t:
+                ui.insert(t=_t)
+                # test tidb pessimic Pessimistic Lock
+                self.assertTrue(False)
+        except Exception as ex:
+            self.assertEqual(type(ex), pymysql.err.IntegrityError)
+            self.assertEqual(str(ex), """(1062, "Duplicate entry 'dennias.chiu@gmail.com1' for key 'email'")""")
+        self.assertIsNone(UserInfo.get_one(email='312dennias.chiu@gmail.com'))
+
     def test_99_drop_table(self):
         with UserInfo.start_transaction() as _t:
             UserInfo.drop(t=_t)

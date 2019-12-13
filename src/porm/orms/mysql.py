@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from collections import defaultdict
 from enum import Enum, unique
-from functools import partial
 from typing import Union, Dict
 
 from porm import BaseType, VarcharType
@@ -277,7 +275,11 @@ class Join(object):
     def to_json(self) -> Dict[str, Dict[str, tuple]]:
         """
 
-        :return: {'join_tablename': {'base_tablename.field1': ('value', 'LIKE'), 'base_tablename.field1': ('\\join_tablename.field2\\', '=')}}
+        :return: {
+            'join_tablename': {
+                'base_tablename.field1': ('value', 'LIKE'), 'base_tablename.field1': ('\\join_tablename.field2\\', '=')
+            }
+        }
         """
         return self._join_terms.copy()
 

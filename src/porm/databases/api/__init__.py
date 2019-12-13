@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import threading
 import uuid
@@ -5,6 +7,7 @@ import warnings
 from functools import wraps
 from typing import List, Dict
 
+from porm.databases.api.drivers import mysql_constants
 from porm.errors import InterfaceError, OperationalError, __exception_wrapper__
 
 try:  # Python 2.7+
@@ -89,7 +92,7 @@ class _NoopLock(object):
 
 
 class _transaction(_callable_context_manager):
-    def __init__(self, db, lock_type=None):
+    def __init__(self, db: DBApi, lock_type=None):
         self.db = db
         self._lock_type = lock_type
 
@@ -354,7 +357,15 @@ class DBApi(_callable_context_manager):
             self.connect()
         if _lock_type:
             # do with lock type
-            self._state.conn.begin()
+            self._begin(pessimistic_lock=True)
+        else:
+            self._begin()
+
+    def _begin(self, pessimistic_lock=False):
+        if pessimistic_lock:
+            # suit for tidb
+            self._state.conn._execute_command(mysql_constants.COMMAND.COM_QUERY, "BEGIN /*!90000 PESSIMISTIC */")
+            self._state.conn._read_ok_packet()
         else:
             self._state.conn.begin()
 
@@ -412,10 +423,10 @@ class DBApi(_callable_context_manager):
             cursor = self.cursor(commit)
             try:
                 cursor.execute(sql, params or ())
-            except Exception:
+            except Exception as ex:
                 if self.autorollback and not self.in_transaction():
                     self.rollback()
-                raise
+                raise ex
             else:
                 if commit and not self.in_transaction():
                     self.commit()
@@ -433,10 +444,10 @@ class DBApi(_callable_context_manager):
             cursor = self.cursor(commit)
             try:
                 cursor.executemany(sql, params or [])
-            except Exception:
+            except Exception as ex:
                 if self.autorollback and not self.in_transaction():
                     self.rollback()
-                raise
+                raise ex
             else:
                 if commit and not self.in_transaction():
                     self.commit()

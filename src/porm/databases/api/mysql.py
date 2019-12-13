@@ -1,8 +1,6 @@
 import contextlib
 import logging
 
-import pymysql
-
 from porm.databases.api import DBApi, _transaction
 from porm.databases.api.drivers import mysql as driver
 from porm.errors import EmptyError
@@ -23,7 +21,7 @@ CONN_CONF = {
     'db': 'PORM_DATABASE',
     'charset': 'utf8',
     'autocommit': 0,  # default 0
-    'cursorclass': pymysql.cursors.DictCursor
+    'cursorclass': driver.cursors.DictCursor
 }
 
 
