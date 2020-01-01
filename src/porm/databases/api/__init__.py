@@ -89,18 +89,24 @@ class _NoopLock(object):
 
 
 class _transaction(_callable_context_manager):
-    def __init__(self, db, lock_type=None):
+    def __init__(self, db, lock_type=None, pessimistic: bool = True):
         self.db = db
         self._lock_type = lock_type
+        self._pessimistic = pessimistic
 
-    def _begin(self):
+    def _begin(self, pessimistic: bool = True):
         if self._lock_type:
-            self.db.begin(self._lock_type)
+            self.db.begin(pessimistic_lock=pessimistic)
         else:
             self.db.begin()
 
-    def commit(self, begin=True):
-        self.db.commit()
+    def commit(self, begin=True, on_commit_failure: List[callable] = None):
+        try:
+            self.db.commit()
+        except Exception:
+            if on_commit_failure:
+                for cb in on_commit_failure:
+                    cb()
         if begin:
             self._begin()
 
@@ -111,7 +117,7 @@ class _transaction(_callable_context_manager):
 
     def __enter__(self):
         if self.db.transaction_depth() == 0:
-            self._begin()
+            self._begin(self._pessimistic)
         self.db.push_transaction(self)
         return self
 
@@ -302,17 +308,17 @@ class DBApi(_callable_context_manager):
         self.connect()
         self.deferred = not bool(self.conn)
 
-    def session_start(self):
+    def session_start(self, pessimistic: bool = True):
         with self._lock:
-            return self.transaction().__enter__()
+            return self.transaction(pessimistic=pessimistic).__enter__()
 
-    def session_commit(self):
+    def session_commit(self, on_commit_failure: List[callable] = None):
         with self._lock:
             try:
                 txn = self.pop_transaction()
             except IndexError:
                 return False
-            txn.commit(begin=self.in_transaction())
+            txn.commit(begin=self.in_transaction(), on_commit_failure=on_commit_failure)
             return True
 
     def session_rollback(self):
@@ -343,8 +349,8 @@ class DBApi(_callable_context_manager):
     def atomic(self):
         return _atomic(self)
 
-    def transaction(self):
-        return _transaction(self, self._lock)
+    def transaction(self, pessimistic: bool = True):
+        return _transaction(self, self._lock, pessimistic=pessimistic)
 
     def savepoint(self):
         return _savepoint(self)

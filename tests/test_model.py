@@ -10,6 +10,14 @@ from porm.types.core import TimeType, DictType
 from tests.test_common import DatabaseTestCase
 
 
+cb_flag = 0
+
+
+def commit_failed_cb():
+    global cb_flag
+    cb_flag = 1
+
+
 class TestModel(DBModel):
     __DATABASE__ = 'PORM_DATABASE_TEST'
     __CONFIG__ = {
@@ -188,6 +196,30 @@ class TestDatabase(DatabaseTestCase):
         except Exception as ex:
             pass
         self.assertIsNone(UserInfo.get_one(email='312dennias.chiu@gmail.com'))
+
+    def test_08_transaction_commit_point_failed_callback(self):
+        # for compatible with tidb optimistic transaction
+        ui = UserInfo.new(
+            email='dennias.chiu@gmail.com1', username='dennias', height=180,
+            properties={"yooyo": "hahaha"})
+        try:
+            with ui.start_transaction(on_commit_failure=[commit_failed_cb]) as _t:
+                ui.insert(t=_t)
+                # test tidb pessimic Pessimistic Lock
+                self.assertTrue(False)
+        except Exception as ex:
+            self.assertEqual(type(ex), pymysql.err.IntegrityError)
+            self.assertEqual(str(ex), """(1062, "Duplicate entry 'dennias.chiu@gmail.com1' for key 'email'")""")
+        self.assertIsNone(UserInfo.get_one(email='312dennias.chiu@gmail.com'))
+        self.assertEqual(cb_flag, 0)
+        # failed at commit point
+        try:
+            with ui.start_transaction(pessimistic=False, on_commit_failure=[commit_failed_cb]) as _t:
+                ui.insert(t=_t)
+                self.assertTrue(True)
+        except Exception as ex:
+            pass
+        self.assertEqual(cb_flag, 1)
 
     def test_99_drop_table(self):
         with UserInfo.start_transaction() as _t:

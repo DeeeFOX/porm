@@ -1,5 +1,6 @@
 import contextlib
 import logging
+from typing import List
 
 import pymysql
 
@@ -96,7 +97,7 @@ class MyDBApi(DBApi):
                 cursor.execute("SET AUTOCOMMIT=%s;" % auto)
 
     @contextlib.contextmanager
-    def start_transaction(self) -> _transaction:
+    def start_transaction(self, pessimistic: bool = True, on_commit_failure: List[callable] = None) -> _transaction:
         """
         Start a new transaction of this connection
         :return:
@@ -104,14 +105,14 @@ class MyDBApi(DBApi):
         _auto = self._get_autocommit(self.conn)
         try:
             self._set_autocommit(self.conn, False)
-            _t = self.session_start()
+            _t = self.session_start(pessimistic=pessimistic)
             yield _t
         except Exception as ex:
             self._log(str(ex), {}, level='error')
             self.session_rollback()
             raise ex
         else:
-            self.session_commit()
+            self.session_commit(on_commit_failure=on_commit_failure)
         finally:
             self._set_autocommit(self.conn, _auto)
 
