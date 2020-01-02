@@ -281,11 +281,11 @@ class DBApi(_callable_context_manager):
         try:
             cursor = conn.cursor()
             cursor.execute('SELECT version()', ())
-            db_type = cursor.fetchall()
+            db_type = cursor.fetchall()[0]
             if isinstance(db_type, dict):
                 db_type = db_type['version()'].lower()
             elif isinstance(db_type, (list, tuple)):
-                db_type = db_type[0][0].lower()
+                db_type = db_type[0].lower()
             else:
                 db_type = 'mysql'
         except Exception:

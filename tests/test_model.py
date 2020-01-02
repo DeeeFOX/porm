@@ -232,8 +232,8 @@ class TestDatabase(DatabaseTestCase):
         try:
             with ui.start_transaction(pessimistic=False, on_commit_failure=[commit_failed_cb]) as _t:
                 if _t.db.db_type == 'tidb':
+                    db_type = _t.db.db_type
                     ui.insert(t=_t)
-                    db_type = 'tidb'
                 self.assertTrue(True)
         except Exception:
             pass
