@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import threading
 import uuid
@@ -5,6 +7,7 @@ import warnings
 from functools import wraps
 from typing import List, Dict
 
+from porm.databases.api.drivers import mysql_constants
 from porm.errors import InterfaceError, OperationalError, __exception_wrapper__
 
 try:  # Python 2.7+
@@ -47,6 +50,7 @@ class _ConnectionState(object):
         self.conn = None
         self.ctx = []
         self.transactions = []
+        self.db_type = 'mysql'
 
         self.reset()
 
@@ -55,12 +59,17 @@ class _ConnectionState(object):
         self.conn = None
         self.ctx = []
         self.transactions = []
+        self.db_type = 'mysql'
 
     def set_connection(self, conn):
         self.conn = conn
         self._closed = False
         self.ctx = []
         self.transactions = []
+        self.db_type = 'mysql'
+
+    def set_db_type(self, db_type: str):
+        self.db_type = db_type
 
     @property
     def closed(self):
@@ -89,16 +98,13 @@ class _NoopLock(object):
 
 
 class _transaction(_callable_context_manager):
-    def __init__(self, db, lock_type=None, pessimistic: bool = True):
+    def __init__(self, db: DBApi, lock_type=None, pessimistic: bool = True):
         self.db = db
         self._lock_type = lock_type
         self._pessimistic = pessimistic
 
-    def _begin(self, pessimistic: bool = True):
-        if self._lock_type:
-            self.db.begin(pessimistic_lock=pessimistic)
-        else:
-            self.db.begin()
+    def _begin(self):
+        self.db.begin(_lock_type=self._lock_type, pessimistic=self._pessimistic)
 
     def commit(self, begin=True, on_commit_failure: List[callable] = None):
         try:
@@ -117,7 +123,7 @@ class _transaction(_callable_context_manager):
 
     def __enter__(self):
         if self.db.transaction_depth() == 0:
-            self._begin(self._pessimistic)
+            self._begin()
         self.db.push_transaction(self)
         return self
 
@@ -271,6 +277,25 @@ class DBApi(_callable_context_manager):
         """
         raise NotImplementedError
 
+    def _get_db_type(self, conn):
+        try:
+            cursor = conn.cursor()
+            cursor.execute('SELECT version()', ())
+            db_type = cursor.fetchall()
+            if isinstance(db_type, dict):
+                db_type = db_type['version()'].lower()
+            elif isinstance(db_type, (list, tuple)):
+                db_type = db_type[0][0].lower()
+            else:
+                db_type = 'mysql'
+        except Exception:
+            db_type = 'mysql'
+        if 'tidb' in db_type:
+            db_type = 'tidb'
+        else:
+            db_type = 'mysql'
+        return db_type
+
     def connect(self, reuse_if_open=False):
         with self._lock:
             if self.deferred:
@@ -284,6 +309,8 @@ class DBApi(_callable_context_manager):
             with __exception_wrapper__:
                 new_conn = self._connect()
                 self._state.set_connection(new_conn)
+                db_type = self._get_db_type(new_conn)
+                self._state.set_db_type(db_type)
                 self._initialize_connection(self._state.conn)
         return True
 
@@ -300,6 +327,10 @@ class DBApi(_callable_context_manager):
         if self.is_closed():
             self.connect()
         return self._state.conn
+
+    @property
+    def db_type(self):
+        return self._state.db_type
 
     def init(self, **config):
         if not self.is_closed():
@@ -355,12 +386,23 @@ class DBApi(_callable_context_manager):
     def savepoint(self):
         return _savepoint(self)
 
-    def begin(self, _lock_type=None):
+    def begin(self, _lock_type=None, pessimistic=True):
         if self.is_closed():
             self.connect()
         if _lock_type:
             # do with lock type
-            self._state.conn.begin()
+            if self._state.db_type == 'tidb' and not pessimistic:
+                self._begin()
+            else:
+                self._begin(pessimistic_lock=True)
+        else:
+            self._begin()
+
+    def _begin(self, pessimistic_lock=False):
+        if pessimistic_lock:
+            # suit for tidb
+            self._state.conn._execute_command(mysql_constants.COMMAND.COM_QUERY, "BEGIN /*!90000 PESSIMISTIC */")
+            self._state.conn._read_ok_packet()
         else:
             self._state.conn.begin()
 
@@ -418,10 +460,10 @@ class DBApi(_callable_context_manager):
             cursor = self.cursor(commit)
             try:
                 cursor.execute(sql, params or ())
-            except Exception:
+            except Exception as ex:
                 if self.autorollback and not self.in_transaction():
                     self.rollback()
-                raise
+                raise ex
             else:
                 if commit and not self.in_transaction():
                     self.commit()
@@ -439,10 +481,10 @@ class DBApi(_callable_context_manager):
             cursor = self.cursor(commit)
             try:
                 cursor.executemany(sql, params or [])
-            except Exception:
+            except Exception as ex:
                 if self.autorollback and not self.in_transaction():
                     self.rollback()
-                raise
+                raise ex
             else:
                 if commit and not self.in_transaction():
                     self.commit()

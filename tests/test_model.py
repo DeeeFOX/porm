@@ -19,11 +19,12 @@ def commit_failed_cb():
 
 
 class TestModel(DBModel):
-    __DATABASE__ = 'PORM_DATABASE_TEST'
+    __DATABASE__ = 'porm_database_test'
     __CONFIG__ = {
         'host': 'localhost',
         'user': 'root',
-        'db': 'PORM_DATABASE_TEST',
+        'password': 'root',
+        'db': 'porm_database_test',
         'charset': 'utf8',
         'autocommit': 0,  # default 0
         'cursorclass': pymysql.cursors.DictCursor
@@ -197,8 +198,23 @@ class TestDatabase(DatabaseTestCase):
             pass
         self.assertIsNone(UserInfo.get_one(email='312dennias.chiu@gmail.com'))
 
+    def test_07_duplicate_key(self):
+        ui = UserInfo.new(
+            email='dennias.chiu@gmail.com1', username='dennias', height=180,
+            properties={"yooyo": "hahaha"})
+        try:
+            with ui.start_transaction() as _t:
+                ui.insert(t=_t)
+                # test tidb pessimic Pessimistic Lock
+                self.assertTrue(False)
+        except Exception as ex:
+            self.assertEqual(type(ex), pymysql.err.IntegrityError)
+            self.assertEqual(str(ex), """(1062, "Duplicate entry 'dennias.chiu@gmail.com1' for key 'email'")""")
+        self.assertIsNone(UserInfo.get_one(email='312dennias.chiu@gmail.com'))
+
     def test_08_transaction_commit_point_failed_callback(self):
         # for compatible with tidb optimistic transaction
+        db_type = 'mysql'
         ui = UserInfo.new(
             email='dennias.chiu@gmail.com1', username='dennias', height=180,
             properties={"yooyo": "hahaha"})
@@ -215,11 +231,14 @@ class TestDatabase(DatabaseTestCase):
         # failed at commit point
         try:
             with ui.start_transaction(pessimistic=False, on_commit_failure=[commit_failed_cb]) as _t:
-                ui.insert(t=_t)
+                if _t.db.db_type == 'tidb':
+                    ui.insert(t=_t)
+                    db_type = 'tidb'
                 self.assertTrue(True)
-        except Exception as ex:
+        except Exception:
             pass
-        self.assertEqual(cb_flag, 1)
+        if db_type == 'tidb':
+            self.assertEqual(cb_flag, 1)
 
     def test_99_drop_table(self):
         with UserInfo.start_transaction() as _t:

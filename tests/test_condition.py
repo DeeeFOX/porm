@@ -1,4 +1,4 @@
-from porm.conditions import Condition
+from porm.orms import Condition
 from tests.test_common import DatabaseTestCase
 
 
