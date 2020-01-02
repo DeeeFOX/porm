@@ -391,7 +391,7 @@ class DBApi(_callable_context_manager):
             self.connect()
         if _lock_type:
             # do with lock type
-            if self._state.db_type == 'tidb' and not pessimistic:
+            if self.db_type == 'tidb' and not pessimistic:
                 self._begin()
             else:
                 self._begin(pessimistic_lock=True)

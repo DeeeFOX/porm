@@ -585,7 +585,8 @@ class DBModel(BaseDBModel, metaclass=DBModelMeta):
 
     @classmethod
     @contextmanager
-    def start_transaction(cls, db: Union[str, dict] = None, pessimistic: bool = True, on_commit_failure: List[callable] = None) -> _transaction:
+    def start_transaction(cls, db: Union[str, dict] = None, pessimistic: bool = True,
+                          on_commit_failure: List[callable] = None) -> _transaction:
         cls._check_meta()
         if isinstance(db, dict):
             config = db
