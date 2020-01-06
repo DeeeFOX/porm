@@ -113,6 +113,7 @@ class _transaction(_callable_context_manager):
             if on_commit_failure:
                 for cb in on_commit_failure:
                     cb()
+            raise
         if begin:
             self._begin()
 
