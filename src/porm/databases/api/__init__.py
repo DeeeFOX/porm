@@ -108,7 +108,8 @@ class _transaction(_callable_context_manager):
 
     def commit(self, begin=True, on_commit_failure: List[callable] = None):
         try:
-            self.db.commit()
+            with __exception_wrapper__:
+                self.db.commit()
         except Exception:
             if on_commit_failure:
                 for cb in on_commit_failure:
