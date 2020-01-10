@@ -50,6 +50,7 @@ class _ConnectionState(object):
         self.conn = None
         self.ctx = []
         self.transactions = []
+        self.db_type = 'mysql'
 
         self.reset()
 
@@ -58,12 +59,17 @@ class _ConnectionState(object):
         self.conn = None
         self.ctx = []
         self.transactions = []
+        self.db_type = 'mysql'
 
     def set_connection(self, conn):
         self.conn = conn
         self._closed = False
         self.ctx = []
         self.transactions = []
+        self.db_type = 'mysql'
+
+    def set_db_type(self, db_type: str):
+        self.db_type = db_type
 
     @property
     def closed(self):
@@ -92,18 +98,23 @@ class _NoopLock(object):
 
 
 class _transaction(_callable_context_manager):
-    def __init__(self, db: DBApi, lock_type=None):
+    def __init__(self, db: DBApi, lock_type=None, pessimistic: bool = True):
         self.db = db
         self._lock_type = lock_type
+        self._pessimistic = pessimistic
 
     def _begin(self):
-        if self._lock_type:
-            self.db.begin(self._lock_type)
-        else:
-            self.db.begin()
+        self.db.begin(_lock_type=self._lock_type, pessimistic=self._pessimistic)
 
-    def commit(self, begin=True):
-        self.db.commit()
+    def commit(self, begin=True, on_commit_failure: List[callable] = None):
+        try:
+            with __exception_wrapper__:
+                self.db.commit()
+        except Exception:
+            if on_commit_failure:
+                for cb in on_commit_failure:
+                    cb()
+            raise
         if begin:
             self._begin()
 
@@ -268,6 +279,25 @@ class DBApi(_callable_context_manager):
         """
         raise NotImplementedError
 
+    def _get_db_type(self, conn):
+        try:
+            cursor = conn.cursor()
+            cursor.execute('SELECT version()', ())
+            db_type = cursor.fetchall()[0]
+            if isinstance(db_type, dict):
+                db_type = db_type['version()'].lower()
+            elif isinstance(db_type, (list, tuple)):
+                db_type = db_type[0].lower()
+            else:
+                db_type = 'mysql'
+        except Exception:
+            db_type = 'mysql'
+        if 'tidb' in db_type:
+            db_type = 'tidb'
+        else:
+            db_type = 'mysql'
+        return db_type
+
     def connect(self, reuse_if_open=False):
         with self._lock:
             if self.deferred:
@@ -281,6 +311,8 @@ class DBApi(_callable_context_manager):
             with __exception_wrapper__:
                 new_conn = self._connect()
                 self._state.set_connection(new_conn)
+                db_type = self._get_db_type(new_conn)
+                self._state.set_db_type(db_type)
                 self._initialize_connection(self._state.conn)
         return True
 
@@ -298,6 +330,10 @@ class DBApi(_callable_context_manager):
             self.connect()
         return self._state.conn
 
+    @property
+    def db_type(self):
+        return self._state.db_type
+
     def init(self, **config):
         if not self.is_closed():
             self.close()
@@ -305,17 +341,17 @@ class DBApi(_callable_context_manager):
         self.connect()
         self.deferred = not bool(self.conn)
 
-    def session_start(self):
+    def session_start(self, pessimistic: bool = True):
         with self._lock:
-            return self.transaction().__enter__()
+            return self.transaction(pessimistic=pessimistic).__enter__()
 
-    def session_commit(self):
+    def session_commit(self, on_commit_failure: List[callable] = None):
         with self._lock:
             try:
                 txn = self.pop_transaction()
             except IndexError:
                 return False
-            txn.commit(begin=self.in_transaction())
+            txn.commit(begin=self.in_transaction(), on_commit_failure=on_commit_failure)
             return True
 
     def session_rollback(self):
@@ -346,18 +382,21 @@ class DBApi(_callable_context_manager):
     def atomic(self):
         return _atomic(self)
 
-    def transaction(self):
-        return _transaction(self, self._lock)
+    def transaction(self, pessimistic: bool = True):
+        return _transaction(self, self._lock, pessimistic=pessimistic)
 
     def savepoint(self):
         return _savepoint(self)
 
-    def begin(self, _lock_type=None):
+    def begin(self, _lock_type=None, pessimistic=True):
         if self.is_closed():
             self.connect()
         if _lock_type:
             # do with lock type
-            self._begin(pessimistic_lock=True)
+            if self.db_type == 'tidb' and not pessimistic:
+                self._begin()
+            else:
+                self._begin(pessimistic_lock=True)
         else:
             self._begin()
 
